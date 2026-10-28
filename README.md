@@ -17,6 +17,24 @@ Planned: more effects. MIDI keyboard input is implemented and tested with a simu
 
 See the **[user guide](docs/USER_GUIDE.md)**.
 
+## Download and install
+Installers are built for every platform by GitHub Actions (see the **Desktop build** runs under *Actions*, artifacts at the
+bottom of each run; tagged versions appear under *Releases* once published).
+
+| System | CPU | Package |
+|---|---|---|
+| Windows | x64 | `.msi` / `.exe` installer |
+| Windows | ARM64 | `.exe` installer (NSIS) |
+| macOS | Apple silicon and Intel (universal) | `.dmg` |
+| Linux | x64 | `.AppImage`, `.deb`, `.rpm` |
+| Linux | ARM64 | `.AppImage`, `.deb`, `.rpm` |
+
+The packages are **not signed** (certificates cost money), so the systems warn on first start:
+- **macOS:** right-click the app and choose *Open*, then confirm.
+- **Windows:** in the SmartScreen window click *More info*, then *Run anyway*.
+- **Linux:** `chmod +x SIDbloom*.AppImage` and run it, or install the `.deb` / `.rpm`. The sound uses ALSA
+  (`libasound2`), which every desktop distribution has.
+
 ## Layout
 - `core/` – Rust: song model, playback engine, 6502 player (`core/player`), export, reSID rendering, CLI
 - `wasm/` – WebAssembly bindings of the core
