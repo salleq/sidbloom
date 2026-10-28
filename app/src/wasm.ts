@@ -10,3 +10,4 @@ export const newSong = (): Song => JSON.parse(w.new_song());
 export const validate = (s: Song) => w.validate(JSON.stringify(s));
 export const exportSid = (s: Song, is8580: boolean) => w.export_sid(JSON.stringify(s), is8580);
 export const exportPrg = (s: Song) => w.export_prg(JSON.stringify(s));
+export const importSwm = (bytes: Uint8Array): { song: Song; warnings: string[] } => JSON.parse(w.import_swm(bytes));

@@ -3,10 +3,10 @@ import { FilterPanel, HelpPanel, InstrumentPanel, OrderPanel } from "./component
 import { Tracker } from "./components/Tracker";
 import { Piano, Scope } from "./components/Widgets";
 import { AudioEngine, type Positions } from "./audio";
-import { openProject, saveFile } from "./files";
+import { openProject, pickSwm, saveFile } from "./files";
 import { NOTE_OFF, hex, noteFromKey, type Song } from "./model";
 import { useStore } from "./store";
-import { exportPrg, exportSid, newSong, validate } from "./wasm";
+import { exportPrg, exportSid, importSwm, newSong, validate } from "./wasm";
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA") && (t as HTMLInputElement).type !== "checkbox" && (t as HTMLInputElement).type !== "range";
@@ -58,6 +58,21 @@ export function App({ initial }: { initial: Song }) {
   const open = useCallback(async () => {
     const r = await openProject();
     if (r) { stop(); dispatch({ t: "load", song: r.song, fileName: r.name }); }
+  }, [dispatch, stop]);
+
+  const [notes, setNotes] = useState<string[]>([]);
+  const importSidWizard = useCallback(async () => {
+    const f = await pickSwm();
+    if (!f) return;
+    try {
+      const r = importSwm(f.bytes);
+      stop();
+      dispatch({ t: "load", song: r.song, fileName: f.name.replace(/\.(swm|prg|p00)$/i, "") + ".sidb" });
+      setNotes(r.warnings);
+      setMessage(`Imported ${f.name}${r.warnings.length ? ` — ${r.warnings.length} things were approximated` : ""}`);
+    } catch (e) {
+      setMessage(`Cannot import ${f.name}: ${e instanceof Error ? e.message : e}`);
+    }
   }, [dispatch, stop]);
 
   const doExport = useCallback(async (kind: "sid" | "prg") => {
@@ -141,6 +156,7 @@ export function App({ initial }: { initial: Song }) {
           <button onClick={() => { stop(); dispatch({ t: "load", song: newSong() }); }}>New</button>
           <button onClick={() => void open()}>Open</button>
           <button onClick={() => void save()}>Save</button>
+          <button onClick={() => void importSidWizard()} title="Import a SID-Wizard 1.x module (.swm)" data-testid="import-swm">Import SW…</button>
         </div>
         <div className="group">
           <button onClick={() => dispatch({ t: "undo" })} disabled={!st.past.length} title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
@@ -176,6 +192,14 @@ export function App({ initial }: { initial: Song }) {
         <input aria-label="Released" placeholder="Released (e.g. 2026 SIDbloom)" value={song.released} maxLength={31} onChange={(e) => dispatch({ t: "edit", fn: (s) => { s.released = e.target.value; } })} />
         <span className="status" role="status" data-testid="status">{message}</span>
       </div>
+
+      {notes.length > 0 && (
+        <details className="import-notes" data-testid="import-notes">
+          <summary>{notes.length} things in the imported song were approximated or left out</summary>
+          <ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
+          <button onClick={() => setNotes([])}>Dismiss</button>
+        </details>
+      )}
 
       <main className="main">
         <div className="left">

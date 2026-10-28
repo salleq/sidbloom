@@ -1,6 +1,7 @@
 pub mod audio;
 pub mod engine;
 pub mod export;
+pub mod import;
 pub mod model;
 pub mod project;
 pub use engine::Engine;

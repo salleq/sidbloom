@@ -69,6 +69,28 @@ try {
   assert.ok(dl.suggestedFilename().endsWith(".sid"));
   step(`exported ${dl.suggestedFilename()} (${bytes.length} bytes)`);
 
+  // import a SID-Wizard module (a tiny hand-built SWM1 file)
+  const hdr = Buffer.alloc(64);
+  hdr.write("SWM1", 0); hdr[4] = 1; hdr[11] = 32; hdr[12] = 3; hdr[13] = 1; hdr[14] = 1; hdr.write("IMPORTED TUNE", 24);
+  const inst = Buffer.alloc(0x10); inst[3] = 0x09; inst[4] = 0xa9;
+  const wf = Buffer.from([0x41, 0, 0, 0x41, 0x0c, 0, 0xff]);
+  const pw = Buffer.from([0x88, 0, 0, 0x10, 0x20, 0, 0xff]);
+  inst[0x0a] = 0x10 + wf.length; inst[0x0b] = 0x10 + wf.length + pw.length;
+  const instAll = Buffer.concat([inst, wf, pw, Buffer.from([0xff])]);
+  const mod = Buffer.concat([
+    Buffer.from([0x00, 0x20]), hdr,
+    Buffer.from([1, 0xfe, 2, 1, 0xfe, 2, 1, 0xfe, 2]),
+    Buffer.from([0xb1, 0x81, 0x0f, 0x40, 0x00, 0x74, 0x32, 13, 9]),
+    instAll, Buffer.from([instAll.length]), Buffer.from("TEST    "),
+    Buffer.from([0x86, 0x86]),
+  ]);
+  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.getByTestId("import-swm").click()]);
+  await chooser.setFiles({ name: "test.swm.prg", mimeType: "application/octet-stream", buffer: mod });
+  await page.waitForFunction(() => document.title.includes("IMPORTED TUNE"));
+  assert.match(await page.locator(".trow").first().innerText(), /C-4/);
+  assert.match(await page.getByTestId("status").innerText(), /Imported test\.swm\.prg/);
+  step("SID-Wizard module imported");
+
   // instrument editing changes the song and is undoable
   await page.getByLabel("Name").fill("My lead");
   assert.equal(await page.getByLabel("Name").inputValue(), "My lead");

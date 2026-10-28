@@ -120,3 +120,7 @@ input[type="number"] { width: 64px; }
 .key.white small { font-size: 10px; padding-bottom: 2px; }
 .key.black { position: absolute; transform: none; top: 0; width: 3.4%; height: 60%; background: #1b1d2b; border: 1px solid #000; z-index: 1; }
 .key.white:active { background: var(--accent); } .key.black:active { background: var(--accent); }
+
+.import-notes { margin: 8px 16px 0; padding: 8px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); font-size: 13px; color: var(--muted); }
+.import-notes summary { cursor: pointer; color: var(--text); }
+.import-notes ul { margin: 8px 0; padding-left: 20px; max-height: 160px; overflow-y: auto; }

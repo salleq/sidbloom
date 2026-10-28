@@ -44,7 +44,7 @@ export interface Song {
   instruments: Instrument[];
 }
 
-export const LIMITS = { instruments: 32, patterns: 64, rows: 64, waveSteps: 128 };
+export const LIMITS = { instruments: 64, patterns: 128, rows: 64, waveSteps: 128 };
 
 export const emptyCell = (): Cell => ({ note: 0, inst: 0, fx: FX_NONE, fx_param: 0 });
 export const emptyPattern = (len = 32): Pattern => ({ rows: Array.from({ length: len }, emptyCell) });

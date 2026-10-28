@@ -9,8 +9,9 @@ Compose C64 music with a clearer interface and export real, C64-compatible `.sid
 - Realtime audio: the same Rust engine + reSID, compiled to WebAssembly, running in an AudioWorklet
 - Export `.sid` (PSID v2, PAL/NTSC, 6581/8580) and `.prg` with an own 6502 player; verified register-for-register against the engine in a 6502 emulator and played back by the independent `sidplayfp`
 - Project files (`.sidb`, JSON)
+- **Import of SID-Wizard 1.x modules** (`.swm`, `.prg`, `.p00`): tested against all of SID-Wizard's own demo tunes (50+), which then export and play back identically in the 6502 player. Features this tracker lacks (chords, filter programs, built-in vibrato, absolute-pitch arps, extra subtunes, tempo programs) are approximated and listed in an import report
 
-Planned: SID-Wizard `.swm` import, MIDI input, more effects.
+Planned: MIDI input, more effects, chords.
 
 ## Layout
 - `core/` – Rust: song model, playback engine, 6502 player (`core/player`), export, reSID rendering, CLI
@@ -32,6 +33,7 @@ npm run tauri -- dev                   # desktop app (needs the Tauri prerequisi
 cargo run --release -p sidcore --bin sidbloom -- demo demo.sidb
 cargo run --release -p sidcore --bin sidbloom -- render demo.sidb demo.wav 8
 cargo run --release -p sidcore --bin sidbloom -- export-sid demo.sidb demo.sid   # plays on a real C64 / any SID player
+cargo run --release -p sidcore --bin sidbloom -- import-swm tune.swm.prg tune.sidb
 ```
 
 License: GPL-3.0-or-later (see `LICENSE`, `NOTICE.md`).

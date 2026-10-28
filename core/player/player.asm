@@ -14,22 +14,23 @@ hdr_olo   = DATA+9          ; per channel order list address
 hdr_ohi   = DATA+12
 freq_lo   = DATA+$10        ; 97 entries
 freq_hi   = DATA+$80
-i_ad      = DATA+$100       ; instrument arrays, 32 entries each, indexed by (inst-1)
-i_sr      = DATA+$120
-i_pwl     = DATA+$140
-i_pwh     = DATA+$160
-i_wlen    = DATA+$180
-i_wloop   = DATA+$1A0       ; $FF = hold last step
-i_wpl     = DATA+$1C0
-i_wph     = DATA+$1E0
-p_len     = DATA+$200       ; pattern arrays, 64 entries each
-p_lo      = DATA+$240
-p_hi      = DATA+$280
-i_pspd    = DATA+$2C0       ; pulse sweep: signed speed, min lo/hi, max lo/hi (32 entries each)
-i_pminl   = DATA+$2E0
-i_pminh   = DATA+$300
-i_pmaxl   = DATA+$320
-i_pmaxh   = DATA+$340
+i_ad      = DATA+$100       ; instrument arrays, 64 entries each, indexed by (inst-1)
+i_sr      = DATA+$140
+i_pwl     = DATA+$180
+i_pwh     = DATA+$1C0
+i_wlen    = DATA+$200
+i_wloop   = DATA+$240       ; $FF = hold last step
+i_wpl     = DATA+$280
+i_wph     = DATA+$2C0
+i_pspd    = DATA+$300       ; pulse sweep: signed speed, min lo/hi, max lo/hi
+i_pminl   = DATA+$340
+i_pminh   = DATA+$380
+i_pmaxl   = DATA+$3C0
+i_pmaxh   = DATA+$400
+p_len     = DATA+$440       ; pattern arrays, 128 entries each
+p_lo      = DATA+$4C0
+p_hi      = DATA+$540
+; variable-length data (wave tables, orders, patterns) follows at DATA+$600
 
 ptr     = $FB
 

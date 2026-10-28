@@ -9,8 +9,8 @@ pub const DATA_BASE: u16 = 0x1800;
 
 const PLAYER: &[u8] = include_bytes!("../../player/player.bin");
 
-pub const MAX_INSTRUMENTS: usize = 32;
-pub const MAX_PATTERNS: usize = 64;
+pub const MAX_INSTRUMENTS: usize = 64;
+pub const MAX_PATTERNS: usize = 128;
 pub const MAX_ROWS: usize = 64;
 pub const MAX_WAVE_STEPS: usize = 128;
 pub const MAX_ORDER: usize = 255;
@@ -52,7 +52,7 @@ pub fn pack_song(song: &Song) -> Result<Vec<u8>, PackError> {
     let base = DATA_BASE as usize;
     let mut img = PLAYER.to_vec();
     assert_eq!(img.len(), base - LOAD_ADDR as usize, "player.bin must fill up to the data area");
-    img.resize(base - LOAD_ADDR as usize + 0x400, 0); // fixed tables; variable data follows
+    img.resize(base - LOAD_ADDR as usize + 0x600, 0); // fixed tables; variable data follows
     let at = |off: usize| base - LOAD_ADDR as usize + off;
 
     let f = song.filter;
@@ -70,7 +70,7 @@ pub fn pack_song(song: &Song) -> Result<Vec<u8>, PackError> {
         img[at(0x80 + n)] = (fr >> 8) as u8;
     }
 
-    // Variable data region starts at DATA_BASE + 0x400; helper returns its absolute address.
+    // Variable data region starts at DATA_BASE + 0x600; helper returns its absolute address.
     let push = |img: &mut Vec<u8>, bytes: &[u8]| -> Result<u16, PackError> {
         let addr = LOAD_ADDR as usize + img.len();
         if addr + bytes.len() > 0xD000 { return Err(PackError::OutOfMemory); }
@@ -88,19 +88,19 @@ pub fn pack_song(song: &Song) -> Result<Vec<u8>, PackError> {
         let bytes: Vec<u8> = steps.iter().flat_map(|s| [s.wave, s.semis as u8]).collect();
         let addr = push(&mut img, &bytes)?;
         img[at(0x100 + i)] = inst.attack_decay;
-        img[at(0x120 + i)] = inst.sustain_release;
-        img[at(0x140 + i)] = inst.pulse_width as u8;
-        img[at(0x160 + i)] = (inst.pulse_width >> 8) as u8 & 0x0F;
-        img[at(0x180 + i)] = steps.len() as u8;
-        img[at(0x1A0 + i)] = inst.wave_loop.map_or(0xFF, |l| l.min(steps.len() as u8 - 1));
-        img[at(0x1C0 + i)] = addr as u8;
-        img[at(0x1E0 + i)] = (addr >> 8) as u8;
+        img[at(0x140 + i)] = inst.sustain_release;
+        img[at(0x180 + i)] = inst.pulse_width as u8;
+        img[at(0x1C0 + i)] = (inst.pulse_width >> 8) as u8 & 0x0F;
+        img[at(0x200 + i)] = steps.len() as u8;
+        img[at(0x240 + i)] = inst.wave_loop.map_or(0xFF, |l| l.min(steps.len() as u8 - 1));
+        img[at(0x280 + i)] = addr as u8;
+        img[at(0x2C0 + i)] = (addr >> 8) as u8;
         let (pmin, pmax) = (inst.pulse_min.min(0x0FFF), inst.pulse_max.min(0x0FFF));
-        img[at(0x2C0 + i)] = inst.pulse_speed as u8;
-        img[at(0x2E0 + i)] = pmin as u8;
-        img[at(0x300 + i)] = (pmin >> 8) as u8;
-        img[at(0x320 + i)] = pmax as u8;
-        img[at(0x340 + i)] = (pmax >> 8) as u8;
+        img[at(0x300 + i)] = inst.pulse_speed as u8;
+        img[at(0x340 + i)] = pmin as u8;
+        img[at(0x380 + i)] = (pmin >> 8) as u8;
+        img[at(0x3C0 + i)] = pmax as u8;
+        img[at(0x400 + i)] = (pmax >> 8) as u8;
     }
 
     for (ch, order) in song.orders.iter().enumerate() {
@@ -113,9 +113,9 @@ pub fn pack_song(song: &Song) -> Result<Vec<u8>, PackError> {
     for (i, pat) in song.patterns.iter().enumerate() {
         let bytes: Vec<u8> = pat.rows.iter().flat_map(|c| [c.note, c.inst, c.fx, c.fx_param]).collect();
         let addr = push(&mut img, &bytes)?;
-        img[at(0x200 + i)] = pat.rows.len() as u8;
-        img[at(0x240 + i)] = addr as u8;
-        img[at(0x280 + i)] = (addr >> 8) as u8;
+        img[at(0x440 + i)] = pat.rows.len() as u8;
+        img[at(0x4C0 + i)] = addr as u8;
+        img[at(0x540 + i)] = (addr >> 8) as u8;
     }
     Ok(img)
 }

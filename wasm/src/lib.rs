@@ -60,3 +60,14 @@ impl Player {
         self.inner.positions().iter().flat_map(|&(o, r)| [o as u32, r as u32]).collect()
     }
 }
+
+/// Imports a SID-Wizard 1.x module. Returns JSON `{"song": ..., "warnings": [...]}`.
+#[wasm_bindgen]
+pub fn import_swm(bytes: &[u8]) -> Result<String, JsError> {
+    let imp = sidcore::import::swm::import_swm(bytes).map_err(|e| JsError::new(&format!("{e}")))?;
+    Ok(format!(
+        "{{\"song\":{},\"warnings\":{}}}",
+        serde_json::to_string(&imp.song).map_err(|e| JsError::new(&e.to_string()))?,
+        serde_json::to_string(&imp.warnings).map_err(|e| JsError::new(&e.to_string()))?
+    ))
+}

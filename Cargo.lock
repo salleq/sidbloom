@@ -151,6 +151,7 @@ name = "sidbloom-wasm"
 version = "0.1.0"
 dependencies = [
  "js-sys",
+ "serde_json",
  "sidcore",
  "wasm-bindgen",
 ]
