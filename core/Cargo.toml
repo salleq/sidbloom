@@ -6,7 +6,7 @@ license = "GPL-3.0-or-later"
 description = "Core of a modern 3-channel SID tracker: model, engine, export"
 
 [dependencies]
-resid-rs = "1.1.1"
+resid = { package = "resid-rs", version = "1.1.1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
