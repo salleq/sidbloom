@@ -32,6 +32,11 @@ GPL-2.0-or-later and GPL-3.0-or-later are compatible, so combining them under GP
 | [midir](https://github.com/Boddlnagg/midir) | MIT | MIDI keyboard input (desktop app) |
 | [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) | MIT OR Apache-2.0 | Rust/WebAssembly bindings |
 
+Five of the Tauri desktop shell's transitive Rust dependencies (`cssparser`, `cssparser-macros`, `dtoa-short`,
+`option-ext`, `selectors`) are licensed MPL-2.0. They are used unmodified; MPL-2.0 is compatible with GPL-3.0-or-later
+(its file-level copyleft applies only to those files, whose sources are available from crates.io).
+The remaining dependency tree uses MIT, Apache-2.0, BSD, Zlib, Unlicense and Unicode-3.0 licences.
+
 Apache-2.0 and MIT are compatible with GPL-3.0-or-later. Dependency licenses should be re-listed
 (`cargo license`, `npx license-checker`) before each release.
 

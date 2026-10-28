@@ -1,10 +1,13 @@
 name: Release
-# Pushing a tag like v0.1.0 builds every installer and attaches them to a DRAFT release
-# (publish it by hand on GitHub after trying the files).
+# Manual only. Releases are made by hand: run "Desktop build", try the installers, attach them to a draft
+# release (SHA256SUMS included) and publish it. Publishing a release therefore does NOT start a build.
+# Running this workflow builds every installer again and uploads them to the draft release for the tag you enter.
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing draft release / tag to attach the installers to (for example v0.1.0)"
+        required: true
 
 jobs:
   build:
@@ -44,8 +47,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tauriScript: node app/node_modules/@tauri-apps/cli/tauri.js
-          tagName: ${{ github.ref_name }}
-          releaseName: "SIDbloom ${{ github.ref_name }}"
+          tagName: ${{ inputs.tag }}
+          releaseName: "SIDbloom ${{ inputs.tag }}"
           releaseBody: "Unsigned preview build. See the README for installation notes (macOS: right-click > Open; Windows: SmartScreen > More info > Run anyway; Linux AppImage: chmod +x)."
           releaseDraft: true
           prerelease: true

@@ -15,7 +15,7 @@ Compose C64 music with a clearer interface and export real, C64-compatible `.sid
 
 Planned: more effects. MIDI keyboard input is implemented and tested with a simulated keyboard; it has not been tried with real hardware yet.
 
-See the **[user guide](docs/USER_GUIDE.md)**.
+See the **[user guide](docs/USER_GUIDE.md)**, the **[changelog](CHANGELOG.md)** and the **[releases](https://github.com/salleq/sidbloom/releases)**. Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Download and install
 Installers are built for every platform by GitHub Actions (see the **Desktop build** runs under *Actions*, artifacts at the
