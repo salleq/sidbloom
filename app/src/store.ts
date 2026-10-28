@@ -195,7 +195,15 @@ export const edits = {
   },
   addInstrument: () => (s: Song) => {
     if (s.instruments.length >= LIMITS.instruments) return;
-    s.instruments.push({ name: `Instrument ${s.instruments.length + 1}`, attack_decay: 0x09, sustain_release: 0xa9, pulse_width: 0x800, wave_table: [{ wave: 0x40, semis: 0 }], wave_loop: null, pulse_speed: 0, pulse_min: 0, pulse_max: 4095 });
+    s.instruments.push({ name: `Instrument ${s.instruments.length + 1}`, attack_decay: 0x09, sustain_release: 0xa9, pulse_width: 0x800, wave_table: [{ wave: 0x40, semis: 0 }], wave_loop: null, pulse_speed: 0, pulse_min: 0, pulse_max: 4095, default_chord: 0 });
+  },
+  addChord: () => (s: Song) => { if (s.chords.length < LIMITS.chords) s.chords.push({ notes: [0, 4, 7], hold: false }); },
+  updateChord: (i: number, fn: (c: Song["chords"][number]) => void) => (s: Song) => { if (s.chords[i]) fn(s.chords[i]); },
+  removeChord: (i: number) => (s: Song) => {
+    s.chords.splice(i, 1);
+    // keep references valid: instruments/patterns pointing at removed or shifted chords
+    for (const ins of s.instruments) ins.default_chord = ins.default_chord === i + 1 ? 0 : ins.default_chord > i + 1 ? ins.default_chord - 1 : ins.default_chord;
+    for (const p of s.patterns) for (const c of p.rows) if (c.fx === 3) c.fx_param = c.fx_param === i + 1 ? 0 : c.fx_param > i + 1 ? c.fx_param - 1 : c.fx_param;
   },
   updateInstrument: (i: number, fn: (inst: Instrument) => void) => (s: Song) => { if (s.instruments[i]) fn(s.instruments[i]); },
 };

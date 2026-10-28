@@ -15,11 +15,13 @@ fn build_module() -> Vec<u8> {
     m[12] = 3; // sequences
     m[13] = 1; // patterns
     m[14] = 1; // instruments
+    m[15] = 9; // chord table bytes
     m[24..24 + 9].copy_from_slice(b"TEST TUNE");
     // sequences: [pattern 1, end] + size byte
     for _ in 0..3 {
         m.extend_from_slice(&[1, 0xFE, 2]);
     }
+    // sequences: [pattern 1, end] + size byte (above); chord table sits after instruments (below)
     // pattern: row 0 = C-4 + instrument 1 + effect 0F (cutoff) 40, then 7 empty rows (0 + packed run of 6), row 8 = D-4
     m.extend_from_slice(&[0xB1, 0x81, 0x0F, 0x40, 0x00, 0x74, 0x32]);
     m.push(13); // unpacked size incl. terminator
@@ -28,7 +30,8 @@ fn build_module() -> Vec<u8> {
     let mut inst = vec![0u8; 0x10];
     inst[3] = 0x09;
     inst[4] = 0xA9;
-    inst.extend_from_slice(&[0x41, 0x00, 0x00, 0x41, 0x0C, 0x00, 0xFF]);
+    inst[8] = 2; // default chord
+    inst.extend_from_slice(&[0x41, 0x00, 0x00, 0x41, 0x7F, 0x00, 0xFF]); // 2nd row jumps to the chord
     inst[0x0A] = inst.len() as u8;
     inst.extend_from_slice(&[0x88, 0x00, 0x00, 0x10, 0x20, 0x00, 0xFF]);
     inst[0x0B] = inst.len() as u8;
@@ -36,6 +39,7 @@ fn build_module() -> Vec<u8> {
     m.extend_from_slice(&inst);
     m.push(inst.len() as u8); // size byte replaces the final terminator in the packed file
     m.extend_from_slice(b"TEST    ");
+    m.extend_from_slice(&[0x00, 0x03, 0x07, 0x7E, 0x00, 0x04, 0x07, 0x0C, 0x7F]); // chord 1 (hold), chord 2 (loop)
     m.extend_from_slice(&[0x86, 0x86]); // subtune tempo: single tempo 6
     m
 }
@@ -56,7 +60,9 @@ fn imports_hand_built_module() {
     let i = &s.instruments[0];
     assert_eq!(i.name, "TEST");
     assert_eq!((i.attack_decay, i.sustain_release), (0x09, 0xA9));
-    assert_eq!(i.wave_table, vec![WaveStep { wave: 0x40, semis: 0 }, WaveStep { wave: 0x40, semis: 12 }]);
+    assert_eq!(i.wave_table, vec![WaveStep { wave: 0x40, semis: 0 }, WaveStep { wave: 0x40, semis: 0 }]);
+    assert_eq!(s.chords, vec![Chord { notes: vec![0, 3, 7], hold: true }, Chord { notes: vec![0, 4, 7, 12], hold: false }]);
+    assert_eq!(i.default_chord, 2);
     assert_eq!(i.wave_loop, None);
     assert_eq!((i.pulse_width, i.pulse_speed, i.pulse_min, i.pulse_max), (0x800, 0x20, 0x800, 0xA00));
     // the result is a valid, exportable song whose player output equals the engine's

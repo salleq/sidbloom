@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FilterPanel, HelpPanel, InstrumentPanel, OrderPanel } from "./components/Panels";
+import { ChordPanel, FilterPanel, HelpPanel, InstrumentPanel, OrderPanel } from "./components/Panels";
 import { Tracker } from "./components/Tracker";
 import { Piano, Scope } from "./components/Widgets";
 import { AudioEngine, type Positions } from "./audio";
@@ -224,6 +224,7 @@ export function App({ initial }: { initial: Song }) {
         <aside className="right-col">
           <OrderPanel song={song} orderPos={st.orderPos} ch={st.cursor.ch} dispatch={dispatch} playOrder={playPos ? playPos[0][0] : null} />
           <InstrumentPanel song={song} inst={st.curInst} dispatch={dispatch} onPreview={() => hearNote(58)} />
+          <ChordPanel song={song} dispatch={dispatch} />
           <FilterPanel song={song} dispatch={dispatch} />
           <HelpPanel />
         </aside>

@@ -14,6 +14,8 @@ pub const MAX_PATTERNS: usize = 128;
 pub const MAX_ROWS: usize = 64;
 pub const MAX_WAVE_STEPS: usize = 128;
 pub const MAX_ORDER: usize = 255;
+pub const MAX_CHORDS: usize = 32;
+pub const MAX_CHORD_LEN: usize = 16;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum PackError {
@@ -25,6 +27,8 @@ pub enum PackError {
     OrderRefersToMissingPattern { channel: usize, pattern: u8 },
     WaveTableTooLong(usize),
     OutOfMemory,
+    TooManyChords,
+    ChordTooLong(usize),
 }
 
 impl std::fmt::Display for PackError {
@@ -38,6 +42,8 @@ impl std::error::Error for PackError {}
 pub fn pack_song(song: &Song) -> Result<Vec<u8>, PackError> {
     if song.instruments.len() > MAX_INSTRUMENTS { return Err(PackError::TooManyInstruments); }
     if song.patterns.len() > MAX_PATTERNS { return Err(PackError::TooManyPatterns); }
+    if song.chords.len() > MAX_CHORDS { return Err(PackError::TooManyChords); }
+    if let Some(i) = song.chords.iter().position(|c| c.notes.len() > MAX_CHORD_LEN) { return Err(PackError::ChordTooLong(i)); }
     for (i, p) in song.patterns.iter().enumerate() {
         if p.rows.is_empty() || p.rows.len() > MAX_ROWS { return Err(PackError::BadPatternLength(i)); }
     }
@@ -52,12 +58,13 @@ pub fn pack_song(song: &Song) -> Result<Vec<u8>, PackError> {
     let base = DATA_BASE as usize;
     let mut img = PLAYER.to_vec();
     assert_eq!(img.len(), base - LOAD_ADDR as usize, "player.bin must fill up to the data area");
-    img.resize(base - LOAD_ADDR as usize + 0x600, 0); // fixed tables; variable data follows
+    img.resize(base - LOAD_ADDR as usize + 0x660, 0); // fixed tables; variable data follows
     let at = |off: usize| base - LOAD_ADDR as usize + off;
 
     let f = song.filter;
     img[at(0)] = song.instruments.len() as u8;
     img[at(1)] = song.speed.max(1);
+    img[at(15)] = song.chords.len() as u8;
     img[at(2)] = (f.cutoff & 7) as u8;
     img[at(3)] = (f.cutoff >> 3) as u8;
     img[at(4)] = (f.resonance << 4) | (f.routing & 7);
@@ -70,7 +77,7 @@ pub fn pack_song(song: &Song) -> Result<Vec<u8>, PackError> {
         img[at(0x80 + n)] = (fr >> 8) as u8;
     }
 
-    // Variable data region starts at DATA_BASE + 0x600; helper returns its absolute address.
+    // Variable data region starts at DATA_BASE + 0x660; helper returns its absolute address.
     let push = |img: &mut Vec<u8>, bytes: &[u8]| -> Result<u16, PackError> {
         let addr = LOAD_ADDR as usize + img.len();
         if addr + bytes.len() > 0xD000 { return Err(PackError::OutOfMemory); }
@@ -96,6 +103,7 @@ pub fn pack_song(song: &Song) -> Result<Vec<u8>, PackError> {
         img[at(0x280 + i)] = addr as u8;
         img[at(0x2C0 + i)] = (addr >> 8) as u8;
         let (pmin, pmax) = (inst.pulse_min.min(0x0FFF), inst.pulse_max.min(0x0FFF));
+        img[at(0x620 + i)] = inst.default_chord;
         img[at(0x300 + i)] = inst.pulse_speed as u8;
         img[at(0x340 + i)] = pmin as u8;
         img[at(0x380 + i)] = (pmin >> 8) as u8;
@@ -116,6 +124,13 @@ pub fn pack_song(song: &Song) -> Result<Vec<u8>, PackError> {
         img[at(0x440 + i)] = pat.rows.len() as u8;
         img[at(0x4C0 + i)] = addr as u8;
         img[at(0x540 + i)] = (addr >> 8) as u8;
+    }
+    for (i, chord) in song.chords.iter().enumerate() {
+        let bytes: Vec<u8> = chord.notes.iter().map(|&n| n as u8).collect();
+        let addr = push(&mut img, &bytes)?;
+        img[at(0x5C0 + i)] = chord.notes.len() as u8 | if chord.hold { 0x80 } else { 0 };
+        img[at(0x5E0 + i)] = addr as u8;
+        img[at(0x600 + i)] = (addr >> 8) as u8;
     }
     Ok(img)
 }

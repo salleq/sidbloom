@@ -12,6 +12,7 @@ hdr_filt  = DATA+2          ; SID regs $15..$18
 hdr_olen  = DATA+6          ; per channel order length
 hdr_olo   = DATA+9          ; per channel order list address
 hdr_ohi   = DATA+12
+hdr_nchord = DATA+15        ; number of chords
 freq_lo   = DATA+$10        ; 97 entries
 freq_hi   = DATA+$80
 i_ad      = DATA+$100       ; instrument arrays, 64 entries each, indexed by (inst-1)
@@ -30,7 +31,11 @@ i_pmaxh   = DATA+$400
 p_len     = DATA+$440       ; pattern arrays, 128 entries each
 p_lo      = DATA+$4C0
 p_hi      = DATA+$540
-; variable-length data (wave tables, orders, patterns) follows at DATA+$600
+c_len     = DATA+$5C0       ; chord arrays, 32 entries: length | $80 = hold last
+c_lo      = DATA+$5E0
+c_hi      = DATA+$600
+i_dchord  = DATA+$620       ; default chord per instrument (64)
+; variable-length data (wave tables, orders, patterns, chord notes) follows at DATA+$660
 
 ptr     = $FB
 
@@ -238,6 +243,10 @@ tr_note:
         sta v_pwh,x
         lda #1
         sta v_pwdir,x
+        lda i_dchord-1,y
+        sta v_chord,x
+        lda #0
+        sta v_cidx,x
 tr_fx:
         lda c_fx
         sta v_fx,x
@@ -250,7 +259,14 @@ tr_fx:
         beq tr_end
         sta speed
         rts
-tr_f8:  cmp #8
+tr_f8:  cmp #3
+        bne tr_f8b
+        lda c_fxp
+        sta v_chord,x
+        lda #0
+        sta v_cidx,x
+        rts
+tr_f8b: cmp #8
         bne tr_f9
         lda #0
         sta filt
@@ -393,6 +409,56 @@ fx_down:
         sbc #0
         sta v_offh,x
 fx_done:
+        ; chord: add the current chord note (instruments with a default chord only)
+        ldy v_inst,x
+        lda i_dchord-1,y
+        beq cd_done
+        lda v_chord,x
+        beq cd_done
+        cmp hdr_nchord
+        beq cd_ok
+        bcs cd_done
+cd_ok:  tay
+        lda c_len-1,y
+        and #$7F
+        beq cd_done
+        sta cd_len
+        lda c_len-1,y
+        sta cd_hold
+        lda c_lo-1,y
+        sta ptr
+        lda c_hi-1,y
+        sta ptr+1
+        lda v_cidx,x
+        cmp cd_len
+        bcc +
+        lda #0
+        sta v_cidx,x
++       tay
+        lda (ptr),y
+        sta tmp
+        ldy #0
+        lda tmp
+        bpl +
+        dey
++       clc
+        lda tmp
+        adc sm_lo
+        sta sm_lo
+        tya
+        adc sm_hi
+        sta sm_hi
+        lda v_cidx,x
+        clc
+        adc #1
+        cmp cd_len
+        bcc cd_store
+        bit cd_hold
+        bmi cd_done
+        lda #0
+cd_store:
+        sta v_cidx,x
+cd_done:
         ; idx = clamp(note + sm, 0, 96)
         lda v_note,x
         clc
@@ -617,6 +683,8 @@ v_vph:  .fill 3
 v_pwl:  .fill 3
 v_pwh:  .fill 3
 v_pwdir: .fill 3
+v_chord: .fill 3
+v_cidx: .fill 3
 filt:   .fill 4
 fsweep: .fill 1
 speed:  .fill 1
@@ -650,6 +718,8 @@ pr_lo:    .fill 1
 pr_hi:    .fill 1
 c_ctrl:   .fill 1
 ad_v:     .fill 1
+cd_len:   .fill 1
+cd_hold:  .fill 1
 sr_v:     .fill 1
 
         .cerror * > DATA, "player does not fit below the data area"

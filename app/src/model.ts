@@ -3,11 +3,12 @@ export const NOTE_OFF = 0xff;
 export const FX_NONE = 0xff;
 export const CHANNELS = 3;
 
-export const FX = { ARPEGGIO: 0x0, SLIDE_UP: 0x1, SLIDE_DOWN: 0x2, VIBRATO: 0x4, FILTER_CUTOFF: 0x8, FILTER_RES_ROUTE: 0x9, FILTER_MODE_VOL: 0xa, FILTER_SWEEP: 0xb, SET_SPEED: 0xf } as const;
+export const FX = { ARPEGGIO: 0x0, SLIDE_UP: 0x1, SLIDE_DOWN: 0x2, CHORD: 0x3, VIBRATO: 0x4, FILTER_CUTOFF: 0x8, FILTER_RES_ROUTE: 0x9, FILTER_MODE_VOL: 0xa, FILTER_SWEEP: 0xb, SET_SPEED: 0xf } as const;
 export const FX_HELP: Record<number, string> = {
   0x0: "Arpeggio (x,y semitones)",
   0x1: "Slide up (units/tick)",
   0x2: "Slide down (units/tick)",
+  0x3: "Chord (number; chord instruments only)",
   0x4: "Vibrato (speed, depth)",
   0x8: "Filter cutoff (00–FF)",
   0x9: "Filter resonance, routing (r,v)",
@@ -30,7 +31,9 @@ export interface Instrument {
   pulse_speed: number;
   pulse_min: number;
   pulse_max: number;
+  default_chord: number;
 }
+export interface Chord { notes: number[]; hold: boolean }
 export interface FilterSettings { cutoff: number; resonance: number; routing: number; mode: number; volume: number }
 export interface Song {
   title: string;
@@ -42,9 +45,10 @@ export interface Song {
   patterns: Pattern[];
   orders: [number[], number[], number[]];
   instruments: Instrument[];
+  chords: Chord[];
 }
 
-export const LIMITS = { instruments: 64, patterns: 128, rows: 64, waveSteps: 128 };
+export const LIMITS = { instruments: 64, patterns: 128, rows: 64, waveSteps: 128, chords: 32, chordLen: 16 };
 
 export const emptyCell = (): Cell => ({ note: 0, inst: 0, fx: FX_NONE, fx_param: 0 });
 export const emptyPattern = (len = 32): Pattern => ({ rows: Array.from({ length: len }, emptyCell) });

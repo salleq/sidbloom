@@ -29,6 +29,8 @@ struct Voice {
     vib_phase: u8,
     pw: u16,
     pw_dir: i16, // +1 / -1
+    chord: u8,   // active chord (1-based, 0 = none)
+    cidx: u8,    // position inside the chord
     last_ctrl: u8,
     wrapped: bool,
 }
@@ -137,6 +139,12 @@ impl Engine {
             v.vib_phase = 0;
             v.pw = self.song.instruments[v.inst.unwrap()].pulse_width & 0x0FFF;
             v.pw_dir = 1;
+            v.chord = self.song.instruments[v.inst.unwrap()].default_chord;
+            v.cidx = 0;
+        }
+        if cell.fx == fx::CHORD {
+            v.chord = cell.fx_param;
+            v.cidx = 0;
         }
         // effects persist per row; an empty fx column clears them
         v.fx = cell.fx;
@@ -214,6 +222,15 @@ impl Engine {
             fx::SLIDE_UP if tick > 0 => v.freq_offset = v.freq_offset.wrapping_add(v.fx_param as i16),
             fx::SLIDE_DOWN if tick > 0 => v.freq_offset = v.freq_offset.wrapping_sub(v.fx_param as i16),
             _ => {}
+        }
+        if inst.default_chord != 0 && v.chord != 0 {
+            if let Some(c) = self.song.chords.get(v.chord as usize - 1).filter(|c| !c.notes.is_empty()) {
+                let len = c.notes.len();
+                if v.cidx as usize >= len { v.cidx = 0; }
+                semis += c.notes[v.cidx as usize] as i32;
+                let next = v.cidx as usize + 1;
+                if next < len { v.cidx = next as u8; } else if !c.hold { v.cidx = 0; }
+            }
         }
         let mut freq = add_clamped(self.freq_table[(v.note + semis).clamp(0, 96) as usize], v.freq_offset);
         if v.fx == fx::VIBRATO {

@@ -110,6 +110,12 @@ export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Son
       </label>
       <Slider label="Sweep min" value={ins.pulse_min} max={4095} onChange={(v) => upd((x) => { x.pulse_min = Math.min(v, x.pulse_max); })} />
       <Slider label="Sweep max" value={ins.pulse_max} max={4095} onChange={(v) => upd((x) => { x.pulse_max = Math.max(v, x.pulse_min); })} />
+      <label className="field">Chord
+        <select aria-label="Default chord" value={ins.default_chord} onChange={(e) => upd((x) => { x.default_chord = Number(e.target.value); })}>
+          <option value={0}>none</option>
+          {song.chords.map((_, k) => <option key={k} value={k + 1}>{hex(k + 1)} — {chordText(song.chords[k].notes)}</option>)}
+        </select>
+      </label>
       <h3>Waveform table <small>one step per frame</small></h3>
       <div className="wave-table">
         {ins.wave_table.map((st, k) => (
@@ -131,6 +137,30 @@ export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Son
       </div>
       <button disabled={ins.wave_table.length >= LIMITS.waveSteps}
         onClick={() => upd((x) => { x.wave_table.push({ ...x.wave_table[x.wave_table.length - 1] }); })}>＋ Step</button>
+    </section>
+  );
+}
+
+const chordText = (notes: number[]) => notes.map((n) => (n > 0 ? `+${n}` : `${n}`)).join(" ");
+
+/* ---------- chords ---------- */
+export function ChordPanel({ song, dispatch }: { song: Song; dispatch: D }) {
+  const parse = (txt: string) => txt.split(/[\s,]+/).filter(Boolean).map(Number).filter((n) => Number.isFinite(n)).map((n) => Math.max(-48, Math.min(48, Math.round(n)))).slice(0, LIMITS.chordLen);
+  return (
+    <section className="panel">
+      <h2>Chords</h2>
+      <div className="sub">Semitone steps played one per frame on instruments with a chord. Select another in a pattern with effect 3xx.</div>
+      {song.chords.map((c, i) => (
+        <div key={i} className="chord-row">
+          <b className="mono">{hex(i + 1)}</b>
+          <input aria-label={`Chord ${i + 1} notes`} defaultValue={c.notes.join(" ")} key={c.notes.join(",")}
+            onBlur={(e) => { const n = parse(e.target.value); if (n.length) dispatch({ t: "edit", fn: edits.updateChord(i, (x) => { x.notes = n; }) }); else e.target.value = c.notes.join(" "); }}
+            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+          <label className="chip"><input type="checkbox" checked={c.hold} onChange={() => dispatch({ t: "edit", fn: edits.updateChord(i, (x) => { x.hold = !x.hold; }) })} /><span title="Hold the last note instead of looping">hold</span></label>
+          <button className="mini" title="Remove chord" onClick={() => dispatch({ t: "edit", fn: edits.removeChord(i) })}>×</button>
+        </div>
+      ))}
+      <button onClick={() => dispatch({ t: "edit", fn: edits.addChord() })} disabled={song.chords.length >= LIMITS.chords}>＋ Chord</button>
     </section>
   );
 }

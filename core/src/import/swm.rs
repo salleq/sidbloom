@@ -95,7 +95,10 @@ pub fn import_swm(bytes: &[u8]) -> Result<SwmImport, SwmError> {
         t.0 = r.take("subtune tempos")?;
     }
     r.skip(tempo_prog_len, "tempo programs")?;
-    r.skip(chord_len, "chord table")?;
+    let mut chord_bytes = vec![0u8; chord_len];
+    for k in (0..chord_len).rev() {
+        chord_bytes[k] = r.take("chord table")?;
+    }
 
     // instruments
     let mut insts: Vec<RawInstrument> = Vec::with_capacity(inst_amount);
@@ -164,9 +167,6 @@ pub fn import_swm(bytes: &[u8]) -> Result<SwmImport, SwmError> {
     if d[4] > 1 {
         warnings.push(format!("module uses multispeed ({}x); it will play slower here", d[4]));
     }
-    if chord_len > 0 {
-        warnings.push("chord table is not imported (chords and chord arpeggios are lost)".into());
-    }
     if tempo_prog_len > 0 {
         warnings.push("tempo programs are not imported".into());
     }
@@ -184,11 +184,50 @@ pub fn import_swm(bytes: &[u8]) -> Result<SwmImport, SwmError> {
         warnings.push("funk tempo was averaged to a single speed".into());
     }
 
+    // ---- chords: $7E/$7F end a chord; $7F loops it, $7E holds its last note (as read from the specification)
+    // The table's first byte is chord 1; chord numbers in patterns and instruments are 1-based.
+    let mut chords: Vec<Chord> = Vec::new();
+    {
+        let mut cur: Vec<i8> = Vec::new();
+        for &b in chord_bytes.iter() {
+            if b == 0x7E || b == 0x7F {
+                chords.push(Chord { notes: std::mem::take(&mut cur), hold: b == 0x7E });
+            } else {
+                cur.push(b as i8);
+            }
+        }
+        if !cur.is_empty() {
+            chords.push(Chord { notes: cur, hold: false });
+        }
+    }
+    let mut chord_warn = false;
+    for c in chords.iter_mut() {
+        if c.notes.len() > crate::export::pack::MAX_CHORD_LEN {
+            c.notes.truncate(crate::export::pack::MAX_CHORD_LEN);
+            chord_warn = true;
+        }
+    }
+    if chords.len() > crate::export::pack::MAX_CHORDS {
+        chords.truncate(crate::export::pack::MAX_CHORDS);
+        chord_warn = true;
+    }
+    if chord_warn {
+        warnings.push(format!("chords were cut to {} chords of {} notes", crate::export::pack::MAX_CHORDS, crate::export::pack::MAX_CHORD_LEN));
+    }
+    let n_chords = chords.len();
+    song.chords = chords;
+
     // ---- instruments
     song.instruments.clear();
     let mut ins_warn = InstWarnings::default();
     for raw in insts.iter().take(crate::export::pack::MAX_INSTRUMENTS) {
-        song.instruments.push(convert_instrument(raw.name.clone(), &raw.data, &mut ins_warn));
+        let mut ins = convert_instrument(raw.name.clone(), &raw.data, &mut ins_warn);
+        if ins_warn.last_chord_jump {
+            // a chord instrument (wave-arp table jumps to the chord table): default chord is header byte 8
+            let c = raw.data.get(8).copied().unwrap_or(0);
+            ins.default_chord = if (c as usize) <= n_chords { c } else { 0 };
+        }
+        song.instruments.push(ins);
     }
     if insts.len() > crate::export::pack::MAX_INSTRUMENTS {
         warnings.push(format!("{} instruments dropped (limit {})", insts.len() - crate::export::pack::MAX_INSTRUMENTS, crate::export::pack::MAX_INSTRUMENTS));
@@ -301,6 +340,7 @@ struct FxStats {
     big_fx: HashMap<u8, usize>,
     bad_inst: usize,
     row_mismatch: usize,
+    chord_dropped: usize,
 }
 
 impl FxStats {
@@ -315,6 +355,9 @@ impl FxStats {
         big.sort();
         for (fx, n) in big {
             w.push(format!("{n} uses of effect {fx:02X} are not supported and were dropped"));
+        }
+        if self.chord_dropped > 0 {
+            w.push(format!("{} chord selections shared a row with another effect and were dropped", self.chord_dropped));
         }
         if self.bad_inst > 0 {
             w.push(format!("{} rows selected an instrument that was not imported", self.bad_inst));
@@ -332,6 +375,7 @@ fn parse_pattern(b: &[u8], rows: usize, n_inst: usize, st: &mut FxStats) -> Vec<
         let nb = b[i];
         i += 1;
         let mut cell = Cell::default();
+        let mut chord_sel: Option<u8> = None;
         let note = nb & 0x7F;
         match note {
             0 => {}
@@ -352,6 +396,7 @@ fn parse_pattern(b: &[u8], rows: usize, n_inst: usize, st: &mut FxStats) -> Vec<
                     }
                 }
                 0x3F | 0 => {}
+                0x70..=0x7F => chord_sel = Some(ins & 0x0F),
                 _ => st.small_fx += 1,
             }
             if ib & 0x80 != 0 {
@@ -360,16 +405,30 @@ fn parse_pattern(b: &[u8], rows: usize, n_inst: usize, st: &mut FxStats) -> Vec<
                 if fx < 0x20 {
                     let val = b.get(i).copied().unwrap_or(0);
                     i += 1;
-                    match map_big_fx(fx, val) {
-                        Some((f, p)) => {
-                            cell.fx = f;
-                            cell.fx_param = p;
+                    if fx == 0x07 {
+                        chord_sel = Some(val & 0x3F);
+                    } else {
+                        match map_big_fx(fx, val) {
+                            Some((f, p)) => {
+                                cell.fx = f;
+                                cell.fx_param = p;
+                            }
+                            None => *st.big_fx.entry(fx).or_insert(0) += 1,
                         }
-                        None => *st.big_fx.entry(fx).or_insert(0) += 1,
                     }
+                } else if (0x70..=0x7F).contains(&fx) {
+                    chord_sel = Some(fx & 0x0F);
                 } else {
                     st.small_fx += 1;
                 }
+            }
+        }
+        if let Some(c) = chord_sel {
+            if cell.fx == crate::model::fx::NONE {
+                cell.fx = crate::model::fx::CHORD;
+                cell.fx_param = c;
+            } else {
+                st.chord_dropped += 1;
             }
         }
         out.push(cell);
@@ -394,8 +453,8 @@ fn map_big_fx(fx: u8, val: u8) -> Option<(u8, u8)> {
 
 #[derive(Default)]
 struct InstWarnings {
+    last_chord_jump: bool,
     absolute_pitch: usize,
-    chord_jump: usize,
     filter_tables: usize,
     vibrato: usize,
     multispeed: usize,
@@ -407,7 +466,6 @@ impl InstWarnings {
     fn report(&self, w: &mut Vec<String>) {
         let items = [
             (self.absolute_pitch, "instruments use absolute pitches in the wave-arp table (treated as no pitch shift)"),
-            (self.chord_jump, "instruments jump to chords in the wave-arp table (treated as no pitch shift)"),
             (self.filter_tables, "instruments have filter programs (not imported; use the filter effects instead)"),
             (self.vibrato, "instruments have built-in vibrato (not imported)"),
             (self.multispeed, "instruments use a wave-arp speed other than 1x (played at 1x)"),
@@ -424,6 +482,7 @@ impl InstWarnings {
 
 fn convert_instrument(name: String, d: &[u8], w: &mut InstWarnings) -> Instrument {
     let mut ins = Instrument::simple(&name, 0x40, d.get(3).copied().unwrap_or(0x09), d.get(4).copied().unwrap_or(0xA9));
+    w.last_chord_jump = false;
     if d.len() < 0x11 {
         return ins;
     }
@@ -485,9 +544,7 @@ fn convert_instrument(name: String, d: &[u8], w: &mut InstWarnings) -> Instrumen
     if absolute {
         w.absolute_pitch += 1;
     }
-    if chord {
-        w.chord_jump += 1;
-    }
+    w.last_chord_jump = chord;
     if steps.is_empty() {
         steps.push(WaveStep { wave: last_wave, semis: shift(0, octave) });
     }

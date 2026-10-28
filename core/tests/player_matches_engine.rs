@@ -43,9 +43,13 @@ fn random_song(seed: u64) -> Song {
                 wave_loop: if r.below(2) == 0 { Some(r.below(n as u32) as u8) } else { None },
                 pulse_speed: if r.below(2) == 0 { 0 } else { (r.below(256) as i32 - 128) as i8 },
                 pulse_min: r.below(4096) as u16,
+                default_chord: if r.below(2) == 0 { 0 } else { r.below(6) as u8 },
                 pulse_max: if r.below(4) == 0 { r.below(8192) as u16 } else { 2048 + r.below(2048) as u16 },
             }
         })
+        .collect();
+    s.chords = (0..r.below(5))
+        .map(|_| Chord { notes: (0..r.below(8)).map(|_| (r.below(41) as i32 - 12) as i8).collect(), hold: r.below(2) == 0 })
         .collect();
     let n_inst = s.instruments.len() as u32;
     s.patterns = (0..1 + r.below(4))
@@ -57,9 +61,10 @@ fn random_song(seed: u64) -> Song {
                     c.inst = if r.below(3) == 0 { 0 } else { 1 + r.below(n_inst + 1) as u8 };
                 }
                 if r.below(3) == 0 {
-                    c.fx = [fx::ARPEGGIO, fx::SLIDE_UP, fx::SLIDE_DOWN, fx::VIBRATO, fx::SET_SPEED, fx::NONE, fx::FILTER_CUTOFF, fx::FILTER_RES_ROUTE, fx::FILTER_MODE_VOL, fx::FILTER_SWEEP][r.below(10) as usize];
+                    c.fx = [fx::ARPEGGIO, fx::SLIDE_UP, fx::SLIDE_DOWN, fx::VIBRATO, fx::SET_SPEED, fx::NONE, fx::FILTER_CUTOFF, fx::FILTER_RES_ROUTE, fx::FILTER_MODE_VOL, fx::FILTER_SWEEP, fx::CHORD, fx::CHORD][r.below(12) as usize];
                     c.fx_param = match c.fx {
                         fx::SET_SPEED => r.below(10) as u8,
+                        fx::CHORD => r.below(7) as u8,
                         fx::SLIDE_UP | fx::SLIDE_DOWN => r.below(256) as u8,
                         _ => r.below(256) as u8,
                     };
@@ -138,5 +143,30 @@ fn stub_bin_is_up_to_date() {
     assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stdout));
     let committed = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/player/stub.bin")).unwrap();
     assert!(std::fs::read(&out).unwrap() == committed, "player/stub.bin is stale: run `64tass -b -o player/stub.bin player/stub.asm`");
+}
+
+#[test]
+fn chords_cycle_and_match_the_player() {
+    let mut s = Song::new();
+    s.chords = vec![Chord { notes: vec![0, 4, 7], hold: false }, Chord { notes: vec![0, 12], hold: true }];
+    s.instruments[0].default_chord = 1;
+    s.speed = 6;
+    s.patterns[0].rows[0] = Cell { note: 58, inst: 1, ..Default::default() };
+    s.patterns[0].rows[2] = Cell { note: 58, inst: 1, fx: fx::CHORD, fx_param: 2 };
+    let log = sidcore::engine::render_log(&s, 36);
+    let freq = |f: &Vec<(u8, u8)>| {
+        f.iter().find(|w| w.0 == 0).unwrap().1 as u16 | (f.iter().find(|w| w.0 == 1).unwrap().1 as u16) << 8
+    };
+    let note = |n: i32| sidcore::engine::note_freq(n, 985_248.0);
+    // chord 1 loops 0, +4, +7 every frame
+    assert_eq!([freq(&log[0]), freq(&log[1]), freq(&log[2]), freq(&log[3])], [note(58), note(62), note(65), note(58)]);
+    // from row 2 (frame 12) chord 2 is selected: 0, +12, then holds +12
+    assert_eq!([freq(&log[12]), freq(&log[13]), freq(&log[14]), freq(&log[15])], [note(58), note(70), note(70), note(70)]);
+    assert_same(&s, 36, "chords");
+    // an instrument without a default chord ignores chord effects
+    s.instruments[0].default_chord = 0;
+    let log = sidcore::engine::render_log(&s, 3);
+    assert_eq!([freq(&log[0]), freq(&log[1])], [note(58), note(58)]);
+    assert_same(&s, 36, "no chord instrument");
 }
 

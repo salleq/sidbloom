@@ -10,6 +10,7 @@ pub mod fx {
     pub const SLIDE_UP: u8 = 0x1; // param: freq units per tick
     pub const SLIDE_DOWN: u8 = 0x2;
     pub const VIBRATO: u8 = 0x4; // param: speed<<4 | depth
+    pub const CHORD: u8 = 0x3; // param: chord number (1-based, 0 = none); only for instruments with a default chord
     pub const FILTER_CUTOFF: u8 = 0x8; // param: cutoff high byte (0..255)
     pub const FILTER_RES_ROUTE: u8 = 0x9; // param: resonance<<4 | voice routing bits
     pub const FILTER_MODE_VOL: u8 = 0xA; // param: mode bits (0x10 LP,0x20 BP,0x40 HP) | volume
@@ -69,6 +70,17 @@ pub struct Instrument {
     pub pulse_min: u16,
     #[serde(default = "default_pulse_max")]
     pub pulse_max: u16,
+    /// Chord (1-based index into `Song::chords`) the instrument plays on every note; 0 = not a chord instrument.
+    #[serde(default)]
+    pub default_chord: u8,
+}
+
+/// A chord: semitone offsets stepped through one per frame, looping (or holding the last one).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Chord {
+    pub notes: Vec<i8>,
+    #[serde(default)]
+    pub hold: bool,
 }
 
 fn default_pulse_max() -> u16 { 0x0FFF }
@@ -85,6 +97,7 @@ impl Instrument {
             pulse_speed: 0,
             pulse_min: 0,
             pulse_max: 0x0FFF,
+            default_chord: 0,
         }
     }
 }
@@ -118,6 +131,8 @@ pub struct Song {
     /// per channel: list of pattern indices
     pub orders: [Vec<u8>; CHANNELS],
     pub instruments: Vec<Instrument>,
+    #[serde(default)]
+    pub chords: Vec<Chord>,
 }
 
 impl Song {
@@ -132,6 +147,7 @@ impl Song {
             patterns: vec![Pattern::new(32)],
             orders: [vec![0], vec![0], vec![0]],
             instruments: vec![Instrument::simple("Pulse", 0x40, 0x09, 0xA9)],
+            chords: vec![],
         }
     }
     pub fn clock_hz(&self) -> f64 { if self.pal { 985_248.0 } else { 1_022_727.0 } }

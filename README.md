@@ -5,13 +5,15 @@ Compose C64 music with a clearer interface and export real, C64-compatible `.sid
 
 **Status:** early but working. You can write music, hear it, and export real `.sid` files.
 
-- Tracker UI (React + Tauri): 3 voices, order list, instrument editor (ADSR, waveform table, pulse width + sweep), filter and filter effects (cutoff, resonance, mode, sweep), undo/redo, piano keyboard, oscilloscope, light/dark theme
+- Tracker UI (React + Tauri): 3 voices, order list, instrument editor (ADSR, waveform table, pulse width + sweep, chords), filter and filter effects (cutoff, resonance, mode, sweep), undo/redo, piano keyboard, oscilloscope, light/dark theme
 - Realtime audio: the same Rust engine + reSID, compiled to WebAssembly, running in an AudioWorklet; edits made during playback are heard immediately without restarting
 - Export `.sid` (PSID v2, PAL/NTSC, 6581/8580) and a self-starting `.prg` (`LOAD"*",8,1` + `RUN`) with an own 6502 player; verified register-for-register against the engine in a 6502 emulator and played back by the independent `sidplayfp`
 - Project files (`.sidb`, JSON)
-- **Import of SID-Wizard 1.x modules** (`.swm`, `.prg`, `.p00`): tested against all of SID-Wizard's own demo tunes (50+), which then export and play back identically in the 6502 player. Features this tracker lacks (chords, filter programs, built-in vibrato, absolute-pitch arps, extra subtunes, tempo programs) are approximated and listed in an import report
+- **Import of SID-Wizard 1.x modules** (`.swm`, `.prg`, `.p00`): tested against all of SID-Wizard's own demo tunes (50+), which then export and play back identically in the 6502 player. Features this tracker lacks (filter programs, built-in vibrato, absolute-pitch arps, extra subtunes, tempo programs, chord speed) are approximated and listed in an import report
 
-Planned: MIDI input, more effects, chords.
+Planned: MIDI input, more effects.
+
+See the **[user guide](docs/USER_GUIDE.md)**.
 
 ## Layout
 - `core/` – Rust: song model, playback engine, 6502 player (`core/player`), export, reSID rendering, CLI

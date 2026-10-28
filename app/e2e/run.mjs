@@ -105,6 +105,22 @@ try {
   assert.equal(await page.getByLabel("Name").inputValue(), "My lead");
   await page.screenshot({ path: `${shots}/ui.png` });
 
+  // chords: add one, give it to the instrument, and the test-note sound must change
+  const energy = async () => page.evaluate(async () => {
+    const a = window.__sidbloom.analyser.current; let e = 0;
+    for (let i = 0; i < 20; i++) { const b = new Float32Array(a.fftSize); a.getFloatTimeDomainData(b); e += b.reduce((s, v) => s + Math.abs(v), 0); await new Promise((r) => setTimeout(r, 40)); }
+    return e;
+  });
+  await page.getByRole("button", { name: "＋ Chord" }).click();
+  assert.equal(await page.getByLabel("Chord 1 notes").inputValue(), "0 4 7");
+  await page.getByLabel("Chord 1 notes").fill("0 12");
+  await page.getByLabel("Chord 1 notes").press("Enter");
+  await page.getByLabel("Default chord").selectOption("1");
+  assert.equal(await page.getByLabel("Default chord").inputValue(), "1");
+  await page.getByRole("button", { name: /Test/ }).click();
+  assert.ok((await energy()) > 1, "chord instrument silent");
+  step("chord editor works and chord instrument plays");
+
   // light theme + narrow window render without horizontal overflow
   await page.getByRole("button", { name: /Toggle theme/ }).click();
   await page.setViewportSize({ width: 820, height: 900 });
