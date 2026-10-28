@@ -11,6 +11,7 @@ declare class AudioWorkletProcessor {
 type In =
   | { t: "init"; bytes: ArrayBuffer }
   | { t: "play"; song: string; is8580: boolean; order: number; row: number }
+  | { t: "update"; song: string }
   | { t: "stop" };
 
 class SidProcessor extends AudioWorkletProcessor {
@@ -36,6 +37,12 @@ class SidProcessor extends AudioWorkletProcessor {
           this.player = new Player(m.song, m.is8580, sampleRate, m.order, m.row);
         } catch (err) {
           this.player = null;
+          this.port.postMessage({ t: "error", message: String(err) });
+        }
+      } else if (m.t === "update" && this.player) {
+        try {
+          this.player.update(m.song);
+        } catch (err) {
           this.port.postMessage({ t: "error", message: String(err) });
         }
       } else if (m.t === "stop") {

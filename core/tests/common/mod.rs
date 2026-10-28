@@ -7,9 +7,9 @@ use sidcore::engine::render_log;
 use sidcore::export::{pack_song, INIT_ADDR, LOAD_ADDR, PLAY_ADDR};
 use sidcore::Song;
 
-struct Ram {
-    mem: Vec<u8>,
-    sid_writes: Vec<(u8, u8)>,
+pub struct Ram {
+    pub mem: Vec<u8>,
+    pub sid_writes: Vec<(u8, u8)>,
 }
 
 impl Bus for Ram {
@@ -20,7 +20,7 @@ impl Bus for Ram {
     }
 }
 
-const SENTINEL: u16 = 0x0300;
+pub const SENTINEL: u16 = 0x0300;
 
 fn call(cpu: &mut CPU<Ram, Nmos6502>, addr: u16) {
     let ret = SENTINEL - 1;
@@ -62,3 +62,52 @@ pub fn assert_same(song: &Song, frames: usize, what: &str) -> u64 {
     worst
 }
 
+
+/// Boots a `.prg` the way a C64 would after `RUN`: executes the BASIC `SYS` target, then fires the
+/// IRQ vector once per frame. Returns the SID writes per frame. KERNAL's IRQ tail is a stub `RTS` at $EA31.
+pub fn prg_log(prg: &[u8], frames: usize) -> Vec<Vec<(u8, u8)>> {
+    let load = u16::from_le_bytes([prg[0], prg[1]]) as usize;
+    assert_eq!(load, 0x0801, "BASIC programs load at $0801");
+    let mut mem = vec![0u8; 65536];
+    mem[load..load + prg.len() - 2].copy_from_slice(&prg[2..]);
+    // BASIC line: link, line number, SYS token, ascii address, 0
+    assert_eq!(mem[0x0805], 0x9E, "SYS token");
+    let sys: String = mem[0x0806..].iter().take_while(|&&b| b != 0).map(|&b| b as char).collect();
+    let sys: u16 = sys.parse().expect("SYS address");
+    mem[0xEA31] = 0x60; // RTS: stands in for the KERNAL IRQ tail
+    let mut cpu = CPU::new(Ram { mem, sid_writes: vec![] }, Nmos6502);
+    // run SEI ... CLI until it reaches the idle `JMP *` loop
+    cpu.registers.program_counter = sys;
+    cpu.registers.stack_pointer.0 = 0xFD;
+    let mut idle = 0;
+    for _ in 0..10_000 {
+        let pc = cpu.registers.program_counter;
+        cpu.single_step();
+        if cpu.registers.program_counter == pc {
+            idle += 1;
+            if idle > 2 { break; }
+        }
+    }
+    assert!(idle > 2, "start-up code never reached its idle loop");
+    let timer = cpu.memory.mem[0xDC04] as u16 | (cpu.memory.mem[0xDC05] as u16) << 8;
+    assert!(timer == 63 * 312 - 1 || timer == 65 * 263 - 1, "CIA timer = {timer}");
+    assert_eq!(cpu.memory.mem[0xDC0D], 0x81, "timer interrupt enabled");
+    cpu.memory.sid_writes.clear(); // init may clear the SID
+    let vec = cpu.memory.mem[0x0314] as u16 | (cpu.memory.mem[0x0315] as u16) << 8;
+    (0..frames)
+        .map(|_| {
+            // an IRQ pushes a return address; here we just call the vector and wait for the KERNAL tail
+            let ret = SENTINEL - 1;
+            cpu.memory.mem[0x1FF] = (ret >> 8) as u8;
+            cpu.memory.mem[0x1FE] = ret as u8;
+            cpu.registers.stack_pointer.0 = 0xFD;
+            cpu.registers.program_counter = vec;
+            let start = cpu.cycles;
+            while cpu.registers.program_counter != 0xEA31 {
+                cpu.single_step();
+                assert!(cpu.cycles - start < 200_000, "irq ran away");
+            }
+            std::mem::take(&mut cpu.memory.sid_writes)
+        })
+        .collect()
+}

@@ -56,6 +56,15 @@ try {
   assert.ok((await page.locator(".tcell.playing").count()) >= 1, "no playing row highlighted");
   step(`audio plays (peak ${level.toFixed(3)}), playhead follows`);
   await page.screenshot({ path: `${shots}/playing.png` });
+
+  // editing during playback reaches the player without stopping it
+  const before = await page.evaluate(() => window.__sidbloom.messages);
+  await page.locator(".f.note").nth(40).click();
+  await page.keyboard.press("c");
+  await page.waitForTimeout(400);
+  await page.waitForFunction((b) => window.__sidbloom.messages > b + 2, before);
+  assert.ok((await page.getByTestId("play").innerText()).includes("Stop"), "playback stopped by an edit");
+  step("edit during playback keeps playing");
   await page.getByTestId("play").click();
   await page.waitForFunction(() => !document.querySelector(".tcell.playing"));
   step("stop");

@@ -126,3 +126,17 @@ fn player_bin_is_up_to_date() {
     let committed = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/player/player.bin")).unwrap();
     assert!(built == committed, "player/player.bin is stale: run `64tass -b -o player/player.bin player/player.asm`");
 }
+
+#[test]
+fn stub_bin_is_up_to_date() {
+    let out = std::env::temp_dir().join("sidbloom_stub_check.bin");
+    let run = std::process::Command::new("64tass")
+        .args(["-b", "-o"]).arg(&out)
+        .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/player/stub.asm"))
+        .output();
+    let Ok(run) = run else { eprintln!("64tass not installed, skipping"); return };
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stdout));
+    let committed = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/player/stub.bin")).unwrap();
+    assert!(std::fs::read(&out).unwrap() == committed, "player/stub.bin is stale: run `64tass -b -o player/stub.bin player/stub.asm`");
+}
+

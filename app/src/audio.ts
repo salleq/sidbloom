@@ -57,6 +57,11 @@ export class AudioEngine {
     this.node!.port.postMessage({ t: "play", song: JSON.stringify(song), is8580, order, row });
   }
 
+  /** Sends an edited song to the running player; playback continues where it was. */
+  update(song: Song) {
+    this.node?.port.postMessage({ t: "update", song: JSON.stringify(song) });
+  }
+
   stop() {
     clearTimeout(this.previewTimer);
     this.node?.port.postMessage({ t: "stop" });

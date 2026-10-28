@@ -69,6 +69,27 @@ impl Engine {
         e
     }
 
+    /// Swaps in an edited song while playing. Voice positions are kept (clamped to the new
+    /// order lists) so the music continues where it was; instrument and filter state carry over.
+    pub fn replace_song(&mut self, song: Song) {
+        let clock = song.clock_hz();
+        if (clock - self.song.clock_hz()).abs() > 1.0 {
+            self.freq_table = (0..=96).map(|n| note_freq(n, clock)).collect();
+        }
+        self.song = song;
+        for ch in 0..CHANNELS {
+            let len = self.song.orders[ch].len().max(1);
+            if self.voices[ch].order_pos >= len { self.voices[ch].order_pos = 0; }
+            let rows = self.pattern_len(ch, self.voices[ch].order_pos);
+            if self.voices[ch].row >= rows { self.voices[ch].row = rows - 1; }
+            match self.voices[ch].inst {
+                Some(i) if i >= self.song.instruments.len() => self.voices[ch].inst = None,
+                _ => {}
+            }
+            self.voices[ch].wave_pos = 0;
+        }
+    }
+
     /// Current (order position, row) of each channel; valid after the first `tick()`.
     pub fn positions(&self) -> [(usize, usize); CHANNELS] {
         std::array::from_fn(|ch| (self.voices[ch].order_pos, self.voices[ch].row))

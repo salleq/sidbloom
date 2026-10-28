@@ -45,6 +45,13 @@ export function App({ initial }: { initial: Song }) {
   }, [audio]);
   const stop = useCallback(() => { audio.stop(); setPlayPos(null); }, [audio]);
 
+  // editing while playing: hand the changed song to the running player (debounced)
+  useEffect(() => {
+    if (!playing) return;
+    const t = window.setTimeout(() => audio.update(st.song), 120);
+    return () => window.clearTimeout(t);
+  }, [st.song, playing, audio]);
+
   const hearNote = useCallback((note: number) => {
     const s = stateRef.current;
     if (!playing) void audio.preview(s.song, s.curInst, note, s.sid8580);

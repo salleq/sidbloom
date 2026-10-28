@@ -34,11 +34,23 @@ pub fn export_sid(song: &Song, sid_8580: bool) -> Result<Vec<u8>, PackError> {
     Ok(out)
 }
 
-/// A C64 `.prg` (load address + image). `SYS` it after loading: it needs a tiny
-/// caller, so this export is meant for tools/loaders that call init/play themselves.
+const STUB: &[u8] = include_bytes!("../../player/stub.bin"); // loads at $0801
+const STUB_LOAD: usize = 0x0801;
+const STUB_TIMER_LO: usize = 0x0817; // operand of the `lda #<timer` (see stub.asm)
+const STUB_TIMER_HI: usize = 0x081C;
+
+/// A self-starting C64 `.prg`: `LOAD"*",8,1` then `RUN`. A BASIC stub installs a CIA-timer IRQ
+/// (50 Hz PAL / 60 Hz NTSC) that calls the player.
 pub fn export_prg(song: &Song) -> Result<Vec<u8>, PackError> {
     let image = pack_song(song)?;
-    let mut out = LOAD_ADDR.to_le_bytes().to_vec();
+    let mut stub = STUB.to_vec();
+    // CIA timer period: one video frame (63 x 312 cycles PAL, 65 x 263 NTSC), minus one for the latch
+    let period: u16 = if song.pal { 63 * 312 - 1 } else { 65 * 263 - 1 };
+    stub[STUB_TIMER_LO - STUB_LOAD] = period as u8;
+    stub[STUB_TIMER_HI - STUB_LOAD] = (period >> 8) as u8;
+    let mut out = (STUB_LOAD as u16).to_le_bytes().to_vec();
+    out.extend_from_slice(&stub);
+    out.resize(2 + (LOAD_ADDR as usize - STUB_LOAD), 0); // zero gap up to the player
     out.extend_from_slice(&image);
     Ok(out)
 }

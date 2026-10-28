@@ -58,6 +58,9 @@ impl Renderer {
     }
 
     pub fn sample_rate(&self) -> u32 { self.sample_rate }
+
+    /// Replaces the song being played with an edited version; takes effect from the next frame.
+    pub fn update_song(&mut self, song: Song) { self.engine.replace_song(song); }
     pub fn positions(&self) -> [(usize, usize); 3] { self.engine.positions() }
     pub fn looped(&self) -> bool { self.engine.looped() }
 
@@ -177,6 +180,39 @@ mod tests {
             assert_eq!((a * 32768.0).round() as i16, *b);
         }
         assert_eq!(r.positions()[0].0, 0);
+    }
+
+    #[test]
+    fn live_update_changes_notes_without_restarting() {
+        let song = single_voice_song(58, 0x10);
+        let mut r = Renderer::new(song.clone(), ChipModel::Mos8580, SAMPLE_RATE);
+        let mut first = vec![0f32; SAMPLE_RATE as usize / 2];
+        r.fill(&mut first);
+        // change the instrument's waveform and the row 8 note while playing
+        let mut edited = song.clone();
+        edited.patterns[0].rows[8] = Cell { note: 70, inst: 1, ..Default::default() };
+        r.update_song(edited);
+        let mut rest = vec![0f32; SAMPLE_RATE as usize];
+        r.fill(&mut rest);
+        let pcm: Vec<i16> = rest.iter().map(|x| (x * 32768.0) as i16).collect();
+        // 0.5 s in = row 4 (6 ticks/row at 50 Hz = 0.12 s); row 8 starts at 0.96 s -> A-5 (880 Hz) is heard later
+        let late = &pcm[(SAMPLE_RATE as usize * 3 / 10)..];
+        assert!(power_at(late, 880.0) > 5.0 * power_at(late, 660.0), "edited note not heard");
+        assert!(r.positions()[0].1 >= 4, "playback restarted instead of continuing");
+    }
+
+    #[test]
+    fn update_song_with_shorter_orders_does_not_panic() {
+        let song = single_voice_song(58, 0x10);
+        let mut r = Renderer::new(song.clone(), ChipModel::Mos8580, SAMPLE_RATE);
+        let mut buf = vec![0f32; 20_000];
+        r.fill(&mut buf);
+        let mut small = song.clone();
+        small.patterns[0] = Pattern::new(2);
+        small.instruments.clear();
+        small.instruments.push(Instrument::simple("x", 0x40, 0, 0xF0));
+        r.update_song(small);
+        r.fill(&mut buf);
     }
 
     #[test]

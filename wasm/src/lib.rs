@@ -52,6 +52,12 @@ impl Player {
         Ok(Player { inner: Renderer::starting_at(song, model(is_8580), sample_rate, order_pos, row) })
     }
 
+    /// Swaps in an edited song while playing (keeps the playback position).
+    pub fn update(&mut self, song_json: &str) -> Result<(), JsError> {
+        self.inner.update_song(parse(song_json)?);
+        Ok(())
+    }
+
     /// Fills `out` with mono samples.
     pub fn fill(&mut self, out: &mut [f32]) { self.inner.fill(out) }
 
