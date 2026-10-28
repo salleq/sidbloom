@@ -195,7 +195,7 @@ export const edits = {
   },
   addInstrument: () => (s: Song) => {
     if (s.instruments.length >= LIMITS.instruments) return;
-    s.instruments.push({ name: `Instrument ${s.instruments.length + 1}`, attack_decay: 0x09, sustain_release: 0xa9, pulse_width: 0x800, wave_table: [{ wave: 0x40, semis: 0 }], wave_loop: null });
+    s.instruments.push({ name: `Instrument ${s.instruments.length + 1}`, attack_decay: 0x09, sustain_release: 0xa9, pulse_width: 0x800, wave_table: [{ wave: 0x40, semis: 0 }], wave_loop: null, pulse_speed: 0, pulse_min: 0, pulse_max: 4095 });
   },
   updateInstrument: (i: number, fn: (inst: Instrument) => void) => (s: Song) => { if (s.instruments[i]) fn(s.instruments[i]); },
 };

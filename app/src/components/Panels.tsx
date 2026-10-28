@@ -102,6 +102,14 @@ export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Son
       <Slider label="Sustain" value={S} max={15} onChange={(v) => upd((x) => { x.sustain_release = (v << 4) | (x.sustain_release & 15); })} />
       <Slider label="Release" value={R} max={15} onChange={(v) => upd((x) => { x.sustain_release = (x.sustain_release & 0xf0) | v; })} />
       <Slider label="Pulse width" value={ins.pulse_width} max={4095} onChange={(v) => upd((x) => { x.pulse_width = v; })} />
+      <h3>Pulse sweep <small>moves the pulse width every frame</small></h3>
+      <label className="slider">
+        <span>Speed</span>
+        <input type="range" min={-64} max={64} value={ins.pulse_speed} onChange={(e) => upd((x) => { x.pulse_speed = Number(e.target.value); })} />
+        <output>{ins.pulse_speed}</output>
+      </label>
+      <Slider label="Sweep min" value={ins.pulse_min} max={4095} onChange={(v) => upd((x) => { x.pulse_min = Math.min(v, x.pulse_max); })} />
+      <Slider label="Sweep max" value={ins.pulse_max} max={4095} onChange={(v) => upd((x) => { x.pulse_max = Math.max(v, x.pulse_min); })} />
       <h3>Waveform table <small>one step per frame</small></h3>
       <div className="wave-table">
         {ins.wave_table.map((st, k) => (

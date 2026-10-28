@@ -3,12 +3,16 @@ export const NOTE_OFF = 0xff;
 export const FX_NONE = 0xff;
 export const CHANNELS = 3;
 
-export const FX = { ARPEGGIO: 0x0, SLIDE_UP: 0x1, SLIDE_DOWN: 0x2, VIBRATO: 0x4, SET_SPEED: 0xf } as const;
+export const FX = { ARPEGGIO: 0x0, SLIDE_UP: 0x1, SLIDE_DOWN: 0x2, VIBRATO: 0x4, FILTER_CUTOFF: 0x8, FILTER_RES_ROUTE: 0x9, FILTER_MODE_VOL: 0xa, FILTER_SWEEP: 0xb, SET_SPEED: 0xf } as const;
 export const FX_HELP: Record<number, string> = {
   0x0: "Arpeggio (x,y semitones)",
   0x1: "Slide up (units/tick)",
   0x2: "Slide down (units/tick)",
   0x4: "Vibrato (speed, depth)",
+  0x8: "Filter cutoff (00–FF)",
+  0x9: "Filter resonance, routing (r,v)",
+  0xa: "Filter mode, volume (m,v)",
+  0xb: "Filter cutoff sweep (signed/tick)",
   0xf: "Set speed (ticks/row)",
 };
 export const VALID_FX = Object.keys(FX_HELP).map(Number);
@@ -23,6 +27,9 @@ export interface Instrument {
   pulse_width: number;
   wave_table: WaveStep[];
   wave_loop: number | null;
+  pulse_speed: number;
+  pulse_min: number;
+  pulse_max: number;
 }
 export interface FilterSettings { cutoff: number; resonance: number; routing: number; mode: number; volume: number }
 export interface Song {

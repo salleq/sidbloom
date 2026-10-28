@@ -27,14 +27,16 @@ pub fn demo_song() -> Song {
     s.title = "SIDbloom demo".into();
     s.author = "SIDbloom".into();
     s.speed = 6;
-    s.instruments = vec![
-        Instrument { name: "Lead".into(), attack_decay: 0x08, sustain_release: 0xA8, pulse_width: 0x800,
-            wave_table: vec![WaveStep { wave: 0x41, semis: 0 }], wave_loop: None },
-        Instrument { name: "Bass".into(), attack_decay: 0x05, sustain_release: 0x85, pulse_width: 0x400,
-            wave_table: vec![WaveStep { wave: 0x21, semis: 0 }], wave_loop: None },
-        Instrument { name: "Hat".into(), attack_decay: 0x00, sustain_release: 0x09, pulse_width: 0x800,
-            wave_table: vec![WaveStep { wave: 0x81, semis: 0 }, WaveStep { wave: 0x80, semis: 0 }], wave_loop: Some(1) },
-    ];
+    let mut lead = Instrument::simple("Lead", 0x41, 0x08, 0xA8);
+    lead.pulse_speed = 12;
+    lead.pulse_min = 0x300;
+    lead.pulse_max = 0xD00;
+    let mut bass = Instrument::simple("Bass", 0x21, 0x05, 0x85);
+    bass.pulse_width = 0x400;
+    let mut hat = Instrument::simple("Hat", 0x81, 0x00, 0x09);
+    hat.wave_table.push(WaveStep { wave: 0x80, semis: 0 });
+    hat.wave_loop = Some(1);
+    s.instruments = vec![lead, bass, hat];
     let c = |note: u8, inst: u8, fx: u8, p: u8| Cell { note, inst, fx, fx_param: p };
     let e = Cell::default();
     let mut lead = Pattern::new(32);

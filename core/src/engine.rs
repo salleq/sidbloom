@@ -28,6 +28,7 @@ struct Voice {
     fx_param: u8,
     vib_phase: u8,
     pw: u16,
+    pw_dir: i16, // +1 / -1
     last_ctrl: u8,
     wrapped: bool,
 }
@@ -39,6 +40,9 @@ pub struct Engine {
     tick_in_row: u8,
     freq_table: Vec<u16>,
     first: bool,
+    /// SID registers $15..$18 plus the cutoff sweep, changed by the filter effects.
+    filt: [u8; 4],
+    sweep: i8,
 }
 
 impl Engine {
@@ -46,7 +50,9 @@ impl Engine {
         let clock = song.clock_hz();
         let freq_table = (0..=96).map(|n| note_freq(n, clock)).collect();
         let speed = song.speed.max(1);
-        Engine { song, voices: Default::default(), speed, tick_in_row: 0, freq_table, first: true }
+        let f = song.filter;
+        let filt = [(f.cutoff & 7) as u8, (f.cutoff >> 3) as u8, (f.resonance << 4) | (f.routing & 7), (f.mode & 0x70) | (f.volume & 15)];
+        Engine { song, voices: Default::default(), speed, tick_in_row: 0, freq_table, first: true, filt, sweep: 0 }
     }
 
     pub fn song(&self) -> &Song { &self.song }
@@ -108,12 +114,20 @@ impl Engine {
             v.freq_offset = 0;
             v.wave_pos = 0;
             v.vib_phase = 0;
-            v.pw = self.song.instruments[v.inst.unwrap()].pulse_width;
+            v.pw = self.song.instruments[v.inst.unwrap()].pulse_width & 0x0FFF;
+            v.pw_dir = 1;
         }
         // effects persist per row; an empty fx column clears them
         v.fx = cell.fx;
         v.fx_param = cell.fx_param;
-        if cell.fx == fx::SET_SPEED && cell.fx_param > 0 { self.speed = cell.fx_param; }
+        match cell.fx {
+            fx::SET_SPEED if cell.fx_param > 0 => self.speed = cell.fx_param,
+            fx::FILTER_CUTOFF => { self.filt[0] = 0; self.filt[1] = cell.fx_param; }
+            fx::FILTER_RES_ROUTE => self.filt[2] = cell.fx_param & 0xF7,
+            fx::FILTER_MODE_VOL => self.filt[3] = cell.fx_param & 0x7F,
+            fx::FILTER_SWEEP => self.sweep = cell.fx_param as i8,
+            _ => {}
+        }
     }
 
     pub fn tick(&mut self) -> Vec<RegWrite> {
@@ -143,11 +157,10 @@ impl Engine {
             self.render_voice(ch, retrigger, &mut w);
         }
 
-        let f = self.song.filter;
-        w.push((21, (f.cutoff & 7) as u8));
-        w.push((22, (f.cutoff >> 3) as u8));
-        w.push((23, (f.resonance << 4) | (f.routing & 7)));
-        w.push((24, (f.mode & 0x70) | (f.volume & 15)));
+        self.filt[1] = (self.filt[1] as i16 + self.sweep as i16).clamp(0, 255) as u8;
+        for (i, &v) in self.filt.iter().enumerate() {
+            w.push((21 + i as u8, v));
+        }
 
         self.tick_in_row += 1;
         if self.tick_in_row >= self.speed { self.tick_in_row = 0; }
@@ -201,6 +214,15 @@ impl Engine {
         w.push((base + 6, inst.sustain_release));
         w.push((base + 4, ctrl));
         v.last_ctrl = ctrl;
+
+        if inst.pulse_speed != 0 {
+            let (lo, hi) = (inst.pulse_min.min(0x0FFF) as i32, inst.pulse_max.min(0x0FFF) as i32);
+            let n = v.pw as i32 + inst.pulse_speed as i32 * v.pw_dir as i32;
+            if n < 0 { v.pw = lo as u16; v.pw_dir = 1; }
+            else if n > hi { v.pw = hi as u16; v.pw_dir = -1; }
+            else if n < lo { v.pw = lo as u16; v.pw_dir = 1; }
+            else { v.pw = n as u16; }
+        }
     }
 }
 

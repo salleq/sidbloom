@@ -57,4 +57,43 @@ mod tests {
         e.tick(); e.tick(); e.tick(); e.tick(); e.tick(); e.tick();
         assert!(e.looped());
     }
+
+    fn reg(frame: &[(u8, u8)], r: u8) -> u8 {
+        frame.iter().find(|w| w.0 == r).unwrap().1
+    }
+    fn pw(frame: &[(u8, u8)]) -> u16 {
+        reg(frame, 2) as u16 | (reg(frame, 3) as u16) << 8
+    }
+
+    #[test]
+    fn pulse_sweep_bounces_between_limits() {
+        let mut s = song_with_note();
+        let i = &mut s.instruments[0];
+        i.pulse_width = 0x200;
+        i.pulse_speed = 0x60;
+        i.pulse_min = 0x100;
+        i.pulse_max = 0x300;
+        let log = engine::render_log(&s, 12);
+        let widths: Vec<u16> = log.iter().map(|f| pw(f)).collect();
+        assert_eq!(&widths[..5], &[0x200, 0x260, 0x2C0, 0x300, 0x2A0]);
+        assert!(widths.iter().all(|w| (0x100..=0x300).contains(w)), "{widths:x?}");
+        assert!(widths.iter().any(|&w| w == 0x300) && widths.iter().any(|&w| w < 0x2A0));
+    }
+
+    #[test]
+    fn filter_effects_change_registers() {
+        let mut s = song_with_note();
+        s.patterns[0].rows[1] = Cell { fx: fx::FILTER_CUTOFF, fx_param: 0x40, ..Default::default() };
+        s.patterns[0].rows[2] = Cell { fx: fx::FILTER_RES_ROUTE, fx_param: 0xF1, ..Default::default() };
+        s.patterns[0].rows[3] = Cell { fx: fx::FILTER_MODE_VOL, fx_param: 0x1A, ..Default::default() };
+        s.patterns[0].rows[4] = Cell { fx: fx::FILTER_SWEEP, fx_param: 0xFE, ..Default::default() }; // -2 per tick
+        let log = engine::render_log(&s, 6 * 6);
+        assert_eq!(reg(&log[0], 22), 0);
+        assert_eq!(reg(&log[6], 22), 0x40);
+        assert_eq!(reg(&log[12], 23), 0xF1);
+        assert_eq!(reg(&log[18], 24), 0x1A);
+        let before = reg(&log[24], 22);
+        assert_eq!(reg(&log[25], 22), before.saturating_sub(2));
+        assert_eq!(reg(&log[35], 22), before.saturating_sub(22));
+    }
 }

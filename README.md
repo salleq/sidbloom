@@ -5,12 +5,12 @@ Compose C64 music with a clearer interface and export real, C64-compatible `.sid
 
 **Status:** early but working. You can write music, hear it, and export real `.sid` files.
 
-- Tracker UI (React + Tauri): 3 voices, order list, instrument editor (ADSR, waveforms, pulse width, wave table), filter, undo/redo, piano keyboard, oscilloscope, light/dark theme
+- Tracker UI (React + Tauri): 3 voices, order list, instrument editor (ADSR, waveform table, pulse width + sweep), filter and filter effects (cutoff, resonance, mode, sweep), undo/redo, piano keyboard, oscilloscope, light/dark theme
 - Realtime audio: the same Rust engine + reSID, compiled to WebAssembly, running in an AudioWorklet
 - Export `.sid` (PSID v2, PAL/NTSC, 6581/8580) and `.prg` with an own 6502 player; verified register-for-register against the engine in a 6502 emulator and played back by the independent `sidplayfp`
 - Project files (`.sidb`, JSON)
 
-Planned: pulse/filter tables and filter changes mid-song, SID-Wizard `.swm` import, MIDI input.
+Planned: SID-Wizard `.swm` import, MIDI input, more effects.
 
 ## Layout
 - `core/` – Rust: song model, playback engine, 6502 player (`core/player`), export, reSID rendering, CLI

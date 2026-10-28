@@ -98,6 +98,9 @@ fn random_song(seed: u64) -> Song {
                     .map(|_| WaveStep { wave: waves[r.below(7) as usize], semis: (r.below(41) as i32 - 20) as i8 })
                     .collect(),
                 wave_loop: if r.below(2) == 0 { Some(r.below(n as u32) as u8) } else { None },
+                pulse_speed: if r.below(2) == 0 { 0 } else { (r.below(256) as i32 - 128) as i8 },
+                pulse_min: r.below(4096) as u16,
+                pulse_max: if r.below(4) == 0 { r.below(8192) as u16 } else { 2048 + r.below(2048) as u16 },
             }
         })
         .collect();
@@ -111,7 +114,7 @@ fn random_song(seed: u64) -> Song {
                     c.inst = if r.below(3) == 0 { 0 } else { 1 + r.below(n_inst + 1) as u8 };
                 }
                 if r.below(3) == 0 {
-                    c.fx = [fx::ARPEGGIO, fx::SLIDE_UP, fx::SLIDE_DOWN, fx::VIBRATO, fx::SET_SPEED, fx::NONE][r.below(6) as usize];
+                    c.fx = [fx::ARPEGGIO, fx::SLIDE_UP, fx::SLIDE_DOWN, fx::VIBRATO, fx::SET_SPEED, fx::NONE, fx::FILTER_CUTOFF, fx::FILTER_RES_ROUTE, fx::FILTER_MODE_VOL, fx::FILTER_SWEEP][r.below(10) as usize];
                     c.fx_param = match c.fx {
                         fx::SET_SPEED => r.below(10) as u8,
                         fx::SLIDE_UP | fx::SLIDE_DOWN => r.below(256) as u8,

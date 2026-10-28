@@ -25,6 +25,11 @@ i_wph     = DATA+$1E0
 p_len     = DATA+$200       ; pattern arrays, 64 entries each
 p_lo      = DATA+$240
 p_hi      = DATA+$280
+i_pspd    = DATA+$2C0       ; pulse sweep: signed speed, min lo/hi, max lo/hi (32 entries each)
+i_pminl   = DATA+$2E0
+i_pminh   = DATA+$300
+i_pmaxl   = DATA+$320
+i_pmaxh   = DATA+$340
 
 ptr     = $FB
 
@@ -42,6 +47,11 @@ init:
         sta speed
         lda #1
         sta first
+        ldx #3
+-       lda hdr_filt,x
+        sta filt,x
+        dex
+        bpl -
         rts
 
 play:
@@ -94,8 +104,21 @@ pl_go:  jsr render_voice
         inx
         cpx #3
         bne pl_voice
+        lda fsweep
+        bmi fs_neg
+        clc
+        adc filt+1
+        bcc fs_store
+        lda #$FF
+        bne fs_store
+fs_neg: clc
+        adc filt+1
+        bcs fs_store
+        lda #0
+fs_store:
+        sta filt+1
         ldx #0
--       lda hdr_filt,x
+-       lda filt,x
         sta $D415,x
         inx
         cpx #4
@@ -212,6 +235,8 @@ tr_note:
         sta v_pwl,x
         lda i_pwh-1,y
         sta v_pwh,x
+        lda #1
+        sta v_pwdir,x
 tr_fx:
         lda c_fx
         sta v_fx,x
@@ -219,10 +244,34 @@ tr_fx:
         sta v_fxp,x
         lda c_fx
         cmp #$0F
-        bne tr_end
+        bne tr_f8
         lda c_fxp
         beq tr_end
         sta speed
+        rts
+tr_f8:  cmp #8
+        bne tr_f9
+        lda #0
+        sta filt
+        lda c_fxp
+        sta filt+1
+        rts
+tr_f9:  cmp #9
+        bne tr_fa
+        lda c_fxp
+        and #$F7
+        sta filt+2
+        rts
+tr_fa:  cmp #$0A
+        bne tr_fb
+        lda c_fxp
+        and #$7F
+        sta filt+3
+        rts
+tr_fb:  cmp #$0B
+        bne tr_end
+        lda c_fxp
+        sta fsweep
 tr_end: rts
 
 ; in: f_lo/f_hi += signed d_lo/d_hi, saturating to 0..$FFFF
@@ -481,6 +530,72 @@ rv_write:
         sta $D406,y
         lda c_ctrl
         sta $D404,y
+        ; ---- pulse width sweep (applies from the next tick) ----
+        ldy v_inst,x
+        lda i_pspd-1,y
+        bne ps_go
+        rts
+ps_go:  sta d_lo
+        ldy #0
+        cmp #0
+        bpl +
+        dey
++       sty d_hi
+        lda v_pwdir,x
+        beq ps_zero
+        bpl ps_add
+        lda #0
+        sec
+        sbc d_lo
+        sta d_lo
+        lda #0
+        sbc d_hi
+        sta d_hi
+        jmp ps_add
+ps_zero:
+        lda #0
+        sta d_lo
+        sta d_hi
+ps_add: lda v_pwl,x
+        clc
+        adc d_lo
+        sta f_lo
+        lda v_pwh,x
+        adc d_hi
+        sta f_hi
+        ldy v_inst,x
+        lda f_hi
+        bmi ps_under
+        lda i_pmaxl-1,y
+        cmp f_lo
+        lda i_pmaxh-1,y
+        sbc f_hi
+        bcc ps_over
+        lda f_lo
+        cmp i_pminl-1,y
+        lda f_hi
+        sbc i_pminh-1,y
+        bcc ps_under
+        lda f_lo
+        sta v_pwl,x
+        lda f_hi
+        sta v_pwh,x
+        rts
+ps_under:
+        lda i_pminl-1,y
+        sta v_pwl,x
+        lda i_pminh-1,y
+        sta v_pwh,x
+        lda #1
+        sta v_pwdir,x
+        rts
+ps_over:
+        lda i_pmaxl-1,y
+        sta v_pwl,x
+        lda i_pmaxh-1,y
+        sta v_pwh,x
+        lda #$FF
+        sta v_pwdir,x
         rts
 
 vbase:  .byte 0, 7, 14
@@ -500,6 +615,9 @@ v_fxp:  .fill 3
 v_vph:  .fill 3
 v_pwl:  .fill 3
 v_pwh:  .fill 3
+v_pwdir: .fill 3
+filt:   .fill 4
+fsweep: .fill 1
 speed:  .fill 1
 tick:   .fill 1
 first:  .fill 1

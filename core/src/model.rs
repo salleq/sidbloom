@@ -10,6 +10,10 @@ pub mod fx {
     pub const SLIDE_UP: u8 = 0x1; // param: freq units per tick
     pub const SLIDE_DOWN: u8 = 0x2;
     pub const VIBRATO: u8 = 0x4; // param: speed<<4 | depth
+    pub const FILTER_CUTOFF: u8 = 0x8; // param: cutoff high byte (0..255)
+    pub const FILTER_RES_ROUTE: u8 = 0x9; // param: resonance<<4 | voice routing bits
+    pub const FILTER_MODE_VOL: u8 = 0xA; // param: mode bits (0x10 LP,0x20 BP,0x40 HP) | volume
+    pub const FILTER_SWEEP: u8 = 0xB; // param: signed cutoff change per tick (until changed)
     pub const SET_SPEED: u8 = 0xF; // param: ticks per row
     pub const NONE: u8 = 0xFF;
 }
@@ -58,7 +62,16 @@ pub struct Instrument {
     pub wave_table: Vec<WaveStep>,
     /// index the wave table loops back to after its last step; None = hold last step
     pub wave_loop: Option<u8>,
+    /// Pulse width sweep: signed change per tick (0 = off), bouncing between min and max.
+    #[serde(default)]
+    pub pulse_speed: i8,
+    #[serde(default)]
+    pub pulse_min: u16,
+    #[serde(default = "default_pulse_max")]
+    pub pulse_max: u16,
 }
+
+fn default_pulse_max() -> u16 { 0x0FFF }
 
 impl Instrument {
     pub fn simple(name: &str, wave: u8, ad: u8, sr: u8) -> Self {
@@ -69,6 +82,9 @@ impl Instrument {
             pulse_width: 0x800,
             wave_table: vec![WaveStep { wave, semis: 0 }],
             wave_loop: None,
+            pulse_speed: 0,
+            pulse_min: 0,
+            pulse_max: 0x0FFF,
         }
     }
 }
