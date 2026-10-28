@@ -1,5 +1,5 @@
 name: Desktop build
-# Builds the installers on every platform without publishing anything.
+# Builds the installers for every platform without publishing anything.
 on:
   push:
     branches: [main]
@@ -7,16 +7,16 @@ on:
 
 jobs:
   build:
+    name: build (${{ matrix.name }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            args: --target universal-apple-darwin
-          - os: windows-latest
-            args: ""
-          - os: ubuntu-22.04
-            args: ""
+          - { name: linux-x64,       os: ubuntu-22.04,     args: "",                                 bin: src-tauri/target/release/sidbloom-desktop,                          arch: "x86-64" }
+          - { name: linux-arm64,     os: ubuntu-22.04-arm, args: "",                                 bin: src-tauri/target/release/sidbloom-desktop,                          arch: "aarch64" }
+          - { name: windows-x64,     os: windows-latest,   args: "",                                 bin: src-tauri/target/release/sidbloom-desktop.exe,                      arch: "x86-64" }
+          - { name: windows-arm64,   os: windows-11-arm,   args: "--bundles nsis",                   bin: src-tauri/target/release/sidbloom-desktop.exe,                      arch: "Aarch64" }
+          - { name: macos-universal, os: macos-latest,     args: "--target universal-apple-darwin", bin: src-tauri/target/universal-apple-darwin/release/sidbloom-desktop,   arch: "arm64" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -26,40 +26,42 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ". -> target\nsrc-tauri -> target"
+          key: ${{ matrix.name }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Linux libraries
-        if: matrix.os == 'ubuntu-22.04'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev xvfb file
       - run: cargo install wasm-bindgen-cli --version 0.2.100 --locked
       - run: npm ci
         working-directory: app
       - name: Desktop shell unit tests (MIDI parsing)
-        if: matrix.os == 'ubuntu-22.04'
+        if: startsWith(matrix.os, 'ubuntu')
         run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Build installers
         run: node app/node_modules/@tauri-apps/cli/tauri.js build ${{ matrix.args }}
-      - name: Smoke test the built app (must keep running 12 s)
-        if: matrix.os != 'ubuntu-22.04'
+      - name: Check the CPU architecture of the built app
         shell: bash
         run: |
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            exe=$(ls src-tauri/target/release/sidbloom-desktop.exe)
-          else
-            exe=$(ls src-tauri/target/universal-apple-darwin/release/sidbloom-desktop)
-          fi
-          "$exe" &
-          pid=$!
-          sleep 12
-          if kill -0 $pid 2>/dev/null; then echo "app still running after 12 s"; kill $pid; else echo "app exited early"; wait $pid; echo "exit code $?"; exit 1; fi
+          case "${{ matrix.os }}" in
+            macos-*) file "${{ matrix.bin }}"; lipo -archs "${{ matrix.bin }}" | tee /dev/stderr | grep -q arm64 && lipo -archs "${{ matrix.bin }}" | grep -q x86_64 ;;
+            windows-*) python -c "import struct,sys; d=open(r'${{ matrix.bin }}','rb').read(); pe=struct.unpack_from('<I',d,0x3c)[0]; m=struct.unpack_from('<H',d,pe+4)[0]; print(hex(m)); sys.exit(0 if m==({'x86-64':0x8664,'Aarch64':0xaa64}['${{ matrix.arch }}']) else 1)" ;;
+            *) file "${{ matrix.bin }}" | tee /dev/stderr | grep -qi "${{ matrix.arch }}" ;;
+          esac
+      - name: Smoke test the built app (must keep running 12 s)
+        shell: bash
+        run: |
+          run_app() { "${{ matrix.bin }}" & pid=$!; sleep 12; if kill -0 $pid 2>/dev/null; then echo "app still running after 12 s"; kill $pid; else echo "app exited early"; wait $pid; echo "exit code $?"; return 1; fi; }
+          if [[ "${{ matrix.os }}" == ubuntu* ]]; then export -f run_app; xvfb-run -a bash -c run_app; else run_app; fi
       - uses: actions/upload-artifact@v4
         with:
-          name: sidbloom-${{ matrix.os }}
+          name: sidbloom-${{ matrix.name }}
           path: |
             src-tauri/target/**/release/bundle/**/*.dmg
             src-tauri/target/**/release/bundle/**/*.msi
             src-tauri/target/**/release/bundle/**/*.exe
             src-tauri/target/**/release/bundle/**/*.deb
+            src-tauri/target/**/release/bundle/**/*.rpm
             src-tauri/target/**/release/bundle/**/*.AppImage
           if-no-files-found: error
