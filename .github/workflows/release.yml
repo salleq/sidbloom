@@ -53,3 +53,22 @@ jobs:
           releaseDraft: true
           prerelease: true
           args: ${{ matrix.args }}
+
+  checksums:
+    name: checksums
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: SHA256SUMS.txt for every file of the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          mkdir dl && cd dl
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*' --clobber
+          rm -f SHA256SUMS.txt
+          sha256sum -- * | tee SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+
