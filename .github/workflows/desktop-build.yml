@@ -52,8 +52,23 @@ jobs:
       - name: Smoke test the built app (must keep running 12 s)
         shell: bash
         run: |
-          run_app() { "${{ matrix.bin }}" & pid=$!; sleep 12; if kill -0 $pid 2>/dev/null; then echo "app still running after 12 s"; kill $pid; else echo "app exited early"; wait $pid; echo "exit code $?"; return 1; fi; }
-          if [[ "${{ matrix.os }}" == ubuntu* ]]; then export -f run_app; xvfb-run -a bash -c run_app; else run_app; fi
+          cat > smoke.sh <<'SCRIPT'
+          #!/usr/bin/env bash
+          "$1" > smoke.log 2>&1 &
+          pid=$!
+          sleep 12
+          if kill -0 $pid 2>/dev/null; then echo "app still running after 12 s"; kill $pid; exit 0; fi
+          wait $pid; echo "app exited early with code $?"; cat smoke.log; exit 1
+          SCRIPT
+          sed -i 's/^          //' smoke.sh
+          chmod +x smoke.sh
+          if [[ "${{ matrix.os }}" == ubuntu* ]]; then
+            # no GPU or session bus on the runner: use WebKit's software paths
+            export WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 LIBGL_ALWAYS_SOFTWARE=1
+            xvfb-run -a --server-args="-screen 0 1280x800x24" ./smoke.sh "${{ matrix.bin }}"
+          else
+            ./smoke.sh "${{ matrix.bin }}"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: sidbloom-${{ matrix.name }}
