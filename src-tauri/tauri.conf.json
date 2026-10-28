@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "io.github.salleq.sidbloom",
   "build": {
-    "beforeDevCommand": "npm --prefix app run dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "npm --prefix app ci && npm --prefix app run wasm && npm --prefix app run build",
+    "beforeBuildCommand": "npm run wasm && npm run build",
     "frontendDist": "../app/dist"
   },
   "app": {

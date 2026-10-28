@@ -25,7 +25,8 @@ cargo test --workspace                 # core tests (needs 64tass for the player
 cd app && npm ci && npm run wasm       # needs: rustup target add wasm32-unknown-unknown; cargo install wasm-bindgen-cli --version 0.2.100
 npm run dev                            # UI in the browser
 npm run test:e2e                       # builds are served and driven with Playwright
-npm run tauri -- dev                   # desktop app (needs the Tauri prerequisites)
+# desktop app (needs the Tauri prerequisites); run from the repo root:
+cd .. && node app/node_modules/@tauri-apps/cli/tauri.js dev
 ```
 
 ## Command line

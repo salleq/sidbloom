@@ -36,8 +36,7 @@ jobs:
       - run: npm ci
         working-directory: app
       - name: Build installers
-        run: npm run tauri -- build ${{ matrix.args }}
-        working-directory: app
+        run: node app/node_modules/@tauri-apps/cli/tauri.js build ${{ matrix.args }}
       - uses: actions/upload-artifact@v4
         with:
           name: sidbloom-${{ matrix.os }}
