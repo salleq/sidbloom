@@ -6,13 +6,19 @@ on:
 
 jobs:
   core:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Tools used by the tests (64tass, sidplayfp)
+        if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y 64tass sidplayfp
+      # the tests that need 64tass / sidplayfp skip themselves where those are absent
       - run: cargo test --workspace
 
   web:
