@@ -37,6 +37,13 @@ and export real `.sid` files that play on a C64 or in any SID player.
 
 **Step** (status bar) sets how many rows the cursor moves after entering a note; 0 keeps it in place.
 
+### Playing with a MIDI keyboard
+Connect the keyboard before starting SIDbloom (or choose it again from the list). In the top bar open **MIDI: off** and pick
+your keyboard. Keys now sound with the selected instrument and, while **Rec** is on, are written into the pattern at the
+cursor exactly like the computer-keyboard piano (then the cursor moves by **Step** rows). Turn **Rec** off to just play.
+Middle C (MIDI 60) is C-4. Notes outside C-0 … B-7 are ignored; velocity is ignored. While a song is playing, the
+keyboard only sounds. On macOS the first start may ask for permission to use MIDI devices.
+
 ## 4. Song order
 A song is a list of *positions*; each position names one pattern per voice. Patterns are reused, so one drum pattern
 can serve a whole song. Use **+ Position / − Position** to extend the song, ◀ ▶ to pick a different pattern for the

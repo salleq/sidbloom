@@ -13,6 +13,8 @@ export class AudioEngine {
   onPositions: (p: Positions) => void = () => {};
   onError: (m: string) => void = () => {};
   private previewTimer: number | undefined;
+  /** Position messages are only forwarded while the whole song plays, not for note previews. */
+  private songActive = false;
   /** For tests: number of position messages received. */
   messages = 0;
 
@@ -39,6 +41,7 @@ export class AudioEngine {
         node.port.onmessage = (e) => {
           if (e.data.t === "pos") {
             this.messages++;
+            if (!this.songActive) return;
             this.onPositions((e.data.p as number[]).reduce<Positions>((acc, v, i) => (i % 2 ? (acc[acc.length - 1][1] = v, acc) : (acc.push([v, 0]), acc)), []));
           } else if (e.data.t === "error") this.onError(e.data.message);
         };
@@ -51,8 +54,9 @@ export class AudioEngine {
     if (this.ctx!.state === "suspended") await this.ctx!.resume();
   }
 
-  async play(song: Song, is8580: boolean, order = 0, row = 0) {
+  async play(song: Song, is8580: boolean, order = 0, row = 0, isPreview = false) {
     await this.ensure();
+    this.songActive = !isPreview;
     clearTimeout(this.previewTimer);
     this.node!.port.postMessage({ t: "play", song: JSON.stringify(song), is8580, order, row });
   }
@@ -63,6 +67,7 @@ export class AudioEngine {
   }
 
   stop() {
+    this.songActive = false;
     clearTimeout(this.previewTimer);
     this.node?.port.postMessage({ t: "stop" });
   }
@@ -75,7 +80,7 @@ export class AudioEngine {
     s.patterns[0].rows[0] = { note, inst, fx: 0xff, fx_param: 0 };
     s.patterns[0].rows[36] = { note: NOTE_OFF, inst: 0, fx: 0xff, fx_param: 0 };
     s.orders = [[0], [1], [1]];
-    await this.play(s, is8580);
+    await this.play(s, is8580, 0, 0, true);
     this.previewTimer = window.setTimeout(() => this.stop(), 1800);
   }
 

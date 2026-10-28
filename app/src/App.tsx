@@ -3,6 +3,7 @@ import { ChordPanel, FilterPanel, HelpPanel, InstrumentPanel, OrderPanel } from 
 import { Tracker } from "./components/Tracker";
 import { Piano, Scope } from "./components/Widgets";
 import { AudioEngine, type Positions } from "./audio";
+import { createMidiBackend, trackerNote, type MidiNote } from "./midi";
 import { openProject, pickSwm, saveFile } from "./files";
 import { NOTE_OFF, hex, noteFromKey, type Song } from "./model";
 import { useStore } from "./store";
@@ -21,6 +22,7 @@ export function App({ initial }: { initial: Song }) {
   const [theme, setTheme] = useState<"auto" | "light" | "dark">("auto");
   const stateRef = useRef(st);
   stateRef.current = st;
+  const playingRef = useRef(false);
 
   useEffect(() => {
     audio.onPositions = setPlayPos;
@@ -37,6 +39,7 @@ export function App({ initial }: { initial: Song }) {
   }, [playPos, st.orderPos, dispatch]);
 
   const playing = playPos !== null;
+  playingRef.current = playing;
   const play = useCallback(async (fromCursor: boolean) => {
     const s = stateRef.current;
     setMessage("");
@@ -44,6 +47,59 @@ export function App({ initial }: { initial: Song }) {
     await audio.play(s.song, s.sid8580, fromCursor ? s.orderPos : 0, fromCursor ? s.cursor.row : 0);
   }, [audio]);
   const stop = useCallback(() => { audio.stop(); setPlayPos(null); }, [audio]);
+
+  // ---- MIDI keyboard
+  const midi = useMemo(() => createMidiBackend(), []);
+  const [midiPorts, setMidiPorts] = useState<string[]>([]);
+  const [midiPort, setMidiPort] = useState("");
+  const [midiRec, setMidiRec] = useState(true);
+  const midiRecRef = useRef(midiRec);
+  midiRecRef.current = midiRec;
+
+  const onMidiNote = useCallback((e: MidiNote) => {
+    if (!e.on) return;
+    const note = trackerNote(e.note);
+    if (note === null) return;
+    const s = stateRef.current;
+    if (!playingRef.current) void audio.preview(s.song, s.curInst, note, s.sid8580);
+    if (midiRecRef.current && !playingRef.current) dispatch({ t: "enterNote", note });
+  }, [audio, dispatch]);
+
+  const refreshMidi = useCallback(async () => {
+    if (!midi) return;
+    try {
+      const ports = await midi.ports();
+      setMidiPorts(ports);
+      setMidiPort((cur) => (cur && !ports.includes(cur) ? "" : cur));
+    } catch (e) {
+      setMessage(`MIDI unavailable: ${e instanceof Error ? e.message : e}`);
+    }
+  }, [midi]);
+
+  const chooseMidi = useCallback(async (name: string) => {
+    if (!midi) return;
+    try {
+      if (!name) { await midi.close(); setMidiPort(""); } else { await midi.open(name, onMidiNote); setMidiPort(name); setMessage(`MIDI input: ${name}`); }
+      try { localStorage.setItem("sidbloom.midi", name); } catch { /* private mode */ }
+    } catch (e) {
+      setMidiPort("");
+      setMessage(`Cannot open MIDI input: ${e instanceof Error ? e.message : e}`);
+    }
+  }, [midi, onMidiNote]);
+
+  useEffect(() => {
+    if (!midi) return;
+    void (async () => {
+      await refreshMidi();
+      let saved = "";
+      try { saved = localStorage.getItem("sidbloom.midi") ?? ""; } catch { /* ignore */ }
+      if (saved) {
+        const ports = await midi.ports().catch(() => [] as string[]);
+        if (ports.includes(saved)) await chooseMidi(saved);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [midi]);
 
   // editing while playing: hand the changed song to the running player (debounced)
   useEffect(() => {
@@ -186,6 +242,15 @@ export function App({ initial }: { initial: Song }) {
             <option value="8580">SID 8580</option><option value="6581">SID 6581</option>
           </select>
         </div>
+        {midi && (
+          <div className="group" title="Play notes from a MIDI keyboard">
+            <select aria-label="MIDI input" value={midiPort} onFocus={() => void refreshMidi()} onChange={(e) => void chooseMidi(e.target.value)}>
+              <option value="">MIDI: off</option>
+              {midiPorts.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <label className="chip"><input type="checkbox" checked={midiRec} onChange={() => setMidiRec(!midiRec)} aria-label="Record MIDI notes into the pattern" /><span title="Write played notes into the pattern at the cursor">Rec</span></label>
+          </div>
+        )}
         <div className="group right">
           <button onClick={() => void doExport("sid")} className="accent" data-testid="export-sid">Export .sid</button>
           <button onClick={() => void doExport("prg")}>.prg</button>

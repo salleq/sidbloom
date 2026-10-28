@@ -31,10 +31,13 @@ jobs:
           node-version: 22
       - name: Linux libraries
         if: matrix.os == 'ubuntu-22.04'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev
       - run: cargo install wasm-bindgen-cli --version 0.2.100 --locked
       - run: npm ci
         working-directory: app
+      - name: Desktop shell unit tests (MIDI parsing)
+        if: matrix.os == 'ubuntu-22.04'
+        run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Build installers
         run: node app/node_modules/@tauri-apps/cli/tauri.js build ${{ matrix.args }}
       - name: Smoke test the built app (must keep running 12 s)

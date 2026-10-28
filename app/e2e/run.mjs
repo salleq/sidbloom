@@ -19,6 +19,12 @@ try {
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 
+  // a fake MIDI keyboard (Web MIDI), so the test can "play" it
+  await page.addInitScript(() => {
+    const input = { id: "kbd1", name: "Test Keyboard", onmidimessage: null };
+    window.__fakeMidi = { send: (bytes) => input.onmidimessage && input.onmidimessage({ data: new Uint8Array(bytes) }) };
+    navigator.requestMIDIAccess = async () => ({ inputs: new Map([["kbd1", input]]) });
+  });
   await page.goto(url);
   await page.waitForSelector("[data-testid=tracker]");
   const step = (s) => console.log("✓", s);
@@ -108,7 +114,7 @@ try {
   // chords: add one, give it to the instrument, and the test-note sound must change
   const energy = async () => page.evaluate(async () => {
     const a = window.__sidbloom.analyser.current; let e = 0;
-    for (let i = 0; i < 20; i++) { const b = new Float32Array(a.fftSize); a.getFloatTimeDomainData(b); e += b.reduce((s, v) => s + Math.abs(v), 0); await new Promise((r) => setTimeout(r, 40)); }
+    for (let i = 0; i < 60; i++) { const b = new Float32Array(a.fftSize); a.getFloatTimeDomainData(b); e += b.reduce((s, v) => s + Math.abs(v), 0); await new Promise((r) => setTimeout(r, 30)); }
     return e;
   });
   await page.getByRole("button", { name: "＋ Chord" }).click();
@@ -120,6 +126,26 @@ try {
   await page.getByRole("button", { name: /Test/ }).click();
   assert.ok((await energy()) > 1, "chord instrument silent");
   step("chord editor works and chord instrument plays");
+
+  // MIDI keyboard: notes play and are written at the cursor; Rec off only plays
+  await page.getByLabel("MIDI input").selectOption("Test Keyboard");
+  await page.locator(".trow").nth(2).locator(".f.note").first().click();
+  assert.doesNotMatch(await page.locator(".trow").nth(2).innerText(), /A-4/);
+  assert.ok((await page.getByTestId("play").innerText()).includes("Play"), "previewing must not look like playing");
+  await page.evaluate(() => window.__fakeMidi.send([0x90, 69, 100])); // A4
+  await page.waitForTimeout(200);
+  assert.match(await page.locator(".trow").nth(2).innerText(), /A-4/);
+  await page.evaluate(() => window.__fakeMidi.send([0x80, 69, 0])); // note off: nothing written
+  await page.evaluate(() => window.__fakeMidi.send([0x90, 72, 0])); // velocity 0 = note off
+  assert.doesNotMatch(await page.locator(".trow").nth(3).innerText(), /C-5/);
+  step("MIDI note is written at the cursor");
+  await page.getByTitle("Write played notes into the pattern at the cursor").click();
+  assert.equal(await page.getByLabel("Record MIDI notes into the pattern").isChecked(), false);
+  await page.evaluate(() => window.__fakeMidi.send([0x90, 72, 100])); // C5, only played
+  await page.waitForTimeout(100);
+  assert.doesNotMatch(await page.locator(".trow").nth(3).innerText(), /C-5/);
+  assert.ok((await energy()) > 1, "MIDI note was not heard");
+  step("MIDI note is heard and, with Rec off, not written");
 
   // light theme + narrow window render without horizontal overflow
   await page.getByRole("button", { name: /Toggle theme/ }).click();
