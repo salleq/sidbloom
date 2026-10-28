@@ -109,7 +109,7 @@ pub fn import_swm(bytes: &[u8]) -> Result<SwmImport, SwmError> {
         if start < HEADER as isize {
             return Err(SwmError::Truncated("instrument data"));
         }
-        insts.push(RawInstrument { data: d[start as usize..size_pos as usize].to_vec(), name: name.trim().to_string() });
+        insts.push(RawInstrument { data: d[start as usize..size_pos as usize].to_vec(), name: name.trim().trim_end_matches('.').trim().to_string() });
         r.pos = start - 1;
     }
     insts.reverse(); // read last-to-first
