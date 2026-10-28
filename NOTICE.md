@@ -28,6 +28,7 @@ GPL-2.0-or-later and GPL-3.0-or-later are compatible, so combining them under GP
 |---|---|---|
 | [React](https://react.dev) | MIT | UI |
 | [Tauri](https://tauri.app) + plugins (dialog, fs) | Apache-2.0 OR MIT | Desktop shell |
+| [miniz_oxide](https://github.com/Frommi/miniz_oxide) | MIT OR Zlib OR Apache-2.0 | Compresses the project embedded in exported `.sid` / `.prg` |
 | [midir](https://github.com/Boddlnagg/midir) | MIT | MIDI keyboard input (desktop app) |
 | [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) | MIT OR Apache-2.0 | Rust/WebAssembly bindings |
 

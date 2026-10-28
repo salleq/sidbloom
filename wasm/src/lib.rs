@@ -77,3 +77,17 @@ pub fn import_swm(bytes: &[u8]) -> Result<String, JsError> {
         serde_json::to_string(&imp.warnings).map_err(|e| JsError::new(&e.to_string()))?
     ))
 }
+
+/// Opens the project embedded in a `.sid` / `.prg` exported by SIDbloom; returns the song as JSON.
+/// Fails with a readable message for any other file.
+#[wasm_bindgen]
+pub fn extract_project(bytes: &[u8]) -> Result<String, JsError> {
+    let song = export::extract_project(bytes).map_err(|e| JsError::new(&format!("{e}")))?;
+    Ok(project::to_json(&song))
+}
+
+/// False when the song is so large that its project data cannot be embedded in the `.sid` / `.prg`.
+#[wasm_bindgen]
+pub fn project_fits(song_json: &str) -> Result<bool, JsError> {
+    Ok(export::project_fits(&parse(song_json)?))
+}

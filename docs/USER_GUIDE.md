@@ -90,6 +90,9 @@ The SID has one filter shared by all voices. Choose which voices go through it, 
 
 ## 9. Files
 - **Save / Open:** `.sidb` project files (readable JSON).
+- **Open a `.sid` / `.prg` you exported:** SIDbloom stores your project inside the file (after the music data; players ignore
+  it), so **Open** can bring an exported tune back for editing. Files not made by SIDbloom, and exports from versions
+  older than this feature, cannot be opened this way. Very large songs may be too big to embed; export tells you.
 - **Export .sid:** the standard format, plays in VICE, SIDPlay, Winamp plug-ins, a SID player on a real C64 or
   SIDs on a SD card. SID 6581 / 8580 and PAL / NTSC are written into the file.
 - **.prg:** a program that starts itself: `LOAD"*",8,1` then `RUN`.

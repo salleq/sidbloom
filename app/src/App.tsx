@@ -7,7 +7,7 @@ import { createMidiBackend, trackerNote, type MidiNote } from "./midi";
 import { openProject, pickSwm, saveFile } from "./files";
 import { NOTE_OFF, hex, noteFromKey, type Song } from "./model";
 import { useStore } from "./store";
-import { exportPrg, exportSid, importSwm, newSong, validate } from "./wasm";
+import { exportPrg, exportSid, importSwm, newSong, projectFits, validate } from "./wasm";
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA") && (t as HTMLInputElement).type !== "checkbox" && (t as HTMLInputElement).type !== "range";
@@ -143,7 +143,10 @@ export function App({ initial }: { initial: Song }) {
     const err = validate(s.song);
     if (err) { setMessage(`Cannot export: ${err}`); return; }
     const bytes = kind === "sid" ? exportSid(s.song, s.sid8580) : exportPrg(s.song);
-    if (await saveFile(`${slug(s.song.title)}.${kind}`, bytes, kind)) setMessage(`Exported ${slug(s.song.title)}.${kind} (${bytes.length} bytes)`);
+    const fits = projectFits(s.song);
+    if (await saveFile(`${slug(s.song.title)}.${kind}`, bytes, kind)) {
+      setMessage(`Exported ${slug(s.song.title)}.${kind} (${bytes.length} bytes)${fits ? "" : " — too large to embed the project, so it cannot be opened for editing again"}`);
+    }
   }, []);
 
   useEffect(() => {
@@ -217,7 +220,7 @@ export function App({ initial }: { initial: Song }) {
         <div className="brand"><img className="logo" src="/favicon.svg" alt="" width={26} height={26} /> SIDbloom</div>
         <div className="group">
           <button onClick={() => { stop(); dispatch({ t: "load", song: newSong() }); }}>New</button>
-          <button onClick={() => void open()}>Open</button>
+          <button onClick={() => void open()} title="Open a .sidb project, or a .sid / .prg exported by SIDbloom (Ctrl+O)">Open</button>
           <button onClick={() => void save()}>Save</button>
           <button onClick={() => void importSidWizard()} title="Import a SID-Wizard 1.x module (.swm)" data-testid="import-swm">Import SW…</button>
         </div>

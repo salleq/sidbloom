@@ -84,6 +84,23 @@ try {
   assert.ok(dl.suggestedFilename().endsWith(".sid"));
   step(`exported ${dl.suggestedFilename()} (${bytes.length} bytes)`);
 
+  // the exported .sid opens again as an editable project
+  await page.locator(".topbar").getByRole("button", { name: "New", exact: true }).click();
+  await page.waitForFunction(() => document.title.startsWith("Untitled"));
+  const [fc] = await Promise.all([page.waitForEvent("filechooser"), page.locator(".topbar").getByRole("button", { name: "Open", exact: true }).click()]);
+  await fc.setFiles({ name: dl.suggestedFilename(), mimeType: "application/octet-stream", buffer: bytes });
+  await page.waitForFunction(() => document.title.includes("SIDbloom demo"));
+  assert.match(await page.locator(".trow").first().innerText(), /A-4/);
+  step("exported .sid opened again for editing");
+  // a .sid that SIDbloom did not export gives a clear message
+  let dialogText = "";
+  page.once("dialog", async (d) => { dialogText = d.message(); await d.accept(); });
+  const [fc2] = await Promise.all([page.waitForEvent("filechooser"), page.locator(".topbar").getByRole("button", { name: "Open", exact: true }).click()]);
+  await fc2.setFiles({ name: "other.sid", mimeType: "application/octet-stream", buffer: Buffer.concat([Buffer.from("PSID"), Buffer.alloc(2), Buffer.from("x".repeat(200))]) });
+  await page.waitForTimeout(300);
+  assert.match(dialogText, /no SIDbloom project/);
+  step("foreign .sid is rejected with an explanation");
+
   // import a SID-Wizard module (a tiny hand-built SWM1 file)
   const hdr = Buffer.alloc(64);
   hdr.write("SWM1", 0); hdr[4] = 1; hdr[11] = 32; hdr[12] = 3; hdr[13] = 1; hdr[14] = 1; hdr.write("IMPORTED TUNE", 24);

@@ -1,4 +1,5 @@
 import type { Song } from "./model";
+import { extractProject } from "./wasm";
 
 const inTauri = () => "__TAURI_INTERNALS__" in window;
 
@@ -22,19 +23,26 @@ export async function saveFile(name: string, bytes: Uint8Array | string, ext: st
   return true;
 }
 
-/** Opens a .sidb project via the system file picker. */
+/** Picks a project: a `.sidb`, or a `.sid` / `.prg` that SIDbloom exported (its project is embedded). */
 export function openProject(): Promise<{ song: Song; name: string } | null> {
   return new Promise((resolve) => {
-    const input = Object.assign(document.createElement("input"), { type: "file", accept: ".sidb,.json" });
+    const input = Object.assign(document.createElement("input"), { type: "file", accept: ".sidb,.json,.sid,.prg" });
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return resolve(null);
       try {
-        const song = JSON.parse(await f.text()) as Song;
-        if (!song.patterns || !song.orders || !song.instruments) throw new Error("not a SIDbloom project");
-        resolve({ song, name: f.name });
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        let song: Song;
+        if (/\.(sid|prg)$/i.test(f.name)) {
+          song = extractProject(bytes);
+        } else {
+          song = JSON.parse(new TextDecoder().decode(bytes)) as Song;
+          if (!song.patterns || !song.orders || !song.instruments) throw new Error("not a SIDbloom project");
+          song.chords ??= [];
+        }
+        resolve({ song, name: f.name.replace(/\.(sid|prg)$/i, ".sidb") });
       } catch (e) {
-        alert(`Could not open ${f.name}: ${e}`);
+        alert(`Could not open ${f.name}: ${e instanceof Error ? e.message : e}`);
         resolve(null);
       }
     };

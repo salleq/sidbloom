@@ -1,4 +1,5 @@
 //! PSID v2 (`.sid`) and `.prg` writers. PSID spec: https://hvsc.c64.org/download/C64Music/DOCUMENTS/SID_file_format.txt
+use super::embed;
 use super::pack::*;
 use crate::model::Song;
 
@@ -31,6 +32,9 @@ pub fn export_sid(song: &Song, sid_8580: bool) -> Result<Vec<u8>, PackError> {
     let mut out = h;
     out.extend_from_slice(&LOAD_ADDR.to_le_bytes());
     out.extend_from_slice(&image);
+    if let Some(extra) = embed::payload(song, LOAD_ADDR as usize + image.len()) {
+        out.extend_from_slice(&extra);
+    }
     Ok(out)
 }
 
@@ -38,6 +42,11 @@ const STUB: &[u8] = include_bytes!("../../player/stub.bin"); // loads at $0801
 const STUB_LOAD: usize = 0x0801;
 const STUB_TIMER_LO: usize = 0x0817; // operand of the `lda #<timer` (see stub.asm)
 const STUB_TIMER_HI: usize = 0x081C;
+
+/// Does the project data fit into this song's export (see `embed`)? False for very large songs.
+pub fn project_fits(song: &Song) -> bool {
+    pack_song(song).map(|img| embed::fits(song, LOAD_ADDR as usize + img.len())).unwrap_or(false)
+}
 
 /// A self-starting C64 `.prg`: `LOAD"*",8,1` then `RUN`. A BASIC stub installs a CIA-timer IRQ
 /// (50 Hz PAL / 60 Hz NTSC) that calls the player.
@@ -52,5 +61,8 @@ pub fn export_prg(song: &Song) -> Result<Vec<u8>, PackError> {
     out.extend_from_slice(&stub);
     out.resize(2 + (LOAD_ADDR as usize - STUB_LOAD), 0); // zero gap up to the player
     out.extend_from_slice(&image);
+    if let Some(extra) = embed::payload(song, LOAD_ADDR as usize + image.len()) {
+        out.extend_from_slice(&extra);
+    }
     Ok(out)
 }
