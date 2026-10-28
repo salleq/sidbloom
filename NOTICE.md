@@ -21,3 +21,8 @@ GPL-2.0-or-later and GPL-3.0-or-later are compatible, so combining them under GP
   SourceForge project field says public domain, but bundled third-party parts may differ.
 - The `.sid` format (PSID/RSID) is an open specification; exported files contain only our
   own player code plus the user's music data.
+
+## Development-only dependencies
+| Component | License | Use |
+|---|---|---|
+| [mos6502](https://github.com/mre/mos6502) | BSD-3-Clause | 6502 CPU emulator used only in tests (not shipped) |

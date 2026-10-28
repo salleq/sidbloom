@@ -10,6 +10,11 @@ pub fn note_freq(note: i32, clock_hz: f64) -> u16 {
     (hz * 16_777_216.0 / clock_hz).round().clamp(0.0, 65535.0) as u16
 }
 
+/// Saturating signed add, mirrored exactly by the 6502 player.
+pub fn add_clamped(f: u16, d: i16) -> u16 {
+    (f as i32 + d as i32).clamp(0, 65535) as u16
+}
+
 #[derive(Default, Clone)]
 struct Voice {
     order_pos: usize,
@@ -17,7 +22,7 @@ struct Voice {
     inst: Option<usize>,
     note: i32,
     gate: bool,
-    freq_offset: i32, // slide accumulator
+    freq_offset: i16, // slide accumulator (wraps, like the 6502 player)
     wave_pos: usize,
     fx: u8,
     fx_param: u8,
@@ -155,20 +160,19 @@ impl Engine {
             fx::ARPEGGIO if v.fx_param != 0 => {
                 semis += match tick % 3 { 0 => 0, 1 => (v.fx_param >> 4) as i32, _ => (v.fx_param & 15) as i32 };
             }
-            fx::SLIDE_UP => v.freq_offset += v.fx_param as i32 * (tick > 0) as i32,
-            fx::SLIDE_DOWN => v.freq_offset -= v.fx_param as i32 * (tick > 0) as i32,
+            fx::SLIDE_UP if tick > 0 => v.freq_offset = v.freq_offset.wrapping_add(v.fx_param as i16),
+            fx::SLIDE_DOWN if tick > 0 => v.freq_offset = v.freq_offset.wrapping_sub(v.fx_param as i16),
             _ => {}
         }
-        let mut freq = self.freq_table[(v.note + semis).clamp(0, 96) as usize] as i32 + v.freq_offset;
+        let mut freq = add_clamped(self.freq_table[(v.note + semis).clamp(0, 96) as usize], v.freq_offset);
         if v.fx == fx::VIBRATO {
             let (speed, depth) = (v.fx_param >> 4, (v.fx_param & 15) as i32);
             v.vib_phase = v.vib_phase.wrapping_add(speed.max(1) * 4);
             // triangle LFO -64..63
             let p = v.vib_phase as i32;
             let tri = if p < 128 { p - 64 } else { 192 - p };
-            freq += tri * depth / 16;
+            freq = add_clamped(freq, (tri * depth / 16) as i16);
         }
-        let freq = freq.clamp(0, 65535) as u16;
 
         let gate = v.gate && !retrigger;
         let ctrl = step.wave | gate as u8;
