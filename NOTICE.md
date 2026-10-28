@@ -22,7 +22,20 @@ GPL-2.0-or-later and GPL-3.0-or-later are compatible, so combining them under GP
 - The `.sid` format (PSID/RSID) is an open specification; exported files contain only our
   own player code plus the user's music data.
 
+## Application (UI) dependencies
+
+| Component | License | Use |
+|---|---|---|
+| [React](https://react.dev) | MIT | UI |
+| [Tauri](https://tauri.app) + plugins (dialog, fs) | Apache-2.0 OR MIT | Desktop shell |
+| [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) | MIT OR Apache-2.0 | Rust/WebAssembly bindings |
+
+Apache-2.0 and MIT are compatible with GPL-3.0-or-later. Dependency licenses should be re-listed
+(`cargo license`, `npx license-checker`) before each release.
+
 ## Development-only dependencies
 | Component | License | Use |
 |---|---|---|
 | [mos6502](https://github.com/mre/mos6502) | BSD-3-Clause | 6502 CPU emulator used only in tests (not shipped) |
+| Vite, TypeScript, Playwright | MIT / Apache-2.0 | Build and end-to-end tests |
+| [sidplayfp](https://github.com/libsidplayfp/sidplayfp) | GPL-2.0-or-later | Independent player used in a cross-check test only |

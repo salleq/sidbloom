@@ -1,0 +1,202 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FilterPanel, HelpPanel, InstrumentPanel, OrderPanel } from "./components/Panels";
+import { Tracker } from "./components/Tracker";
+import { Piano, Scope } from "./components/Widgets";
+import { AudioEngine, type Positions } from "./audio";
+import { openProject, saveFile } from "./files";
+import { NOTE_OFF, hex, noteFromKey, type Song } from "./model";
+import { useStore } from "./store";
+import { exportPrg, exportSid, newSong, validate } from "./wasm";
+
+const isTyping = (t: EventTarget | null) =>
+  t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA") && (t as HTMLInputElement).type !== "checkbox" && (t as HTMLInputElement).type !== "range";
+
+const slug = (s: string) => s.trim().replace(/[^a-z0-9-_]+/gi, "_").replace(/^_+|_+$/g, "") || "song";
+
+export function App({ initial }: { initial: Song }) {
+  const [st, dispatch] = useStore(initial);
+  const audio = useMemo(() => new AudioEngine(), []);
+  const [playPos, setPlayPos] = useState<Positions | null>(null);
+  const [message, setMessage] = useState("");
+  const [theme, setTheme] = useState<"auto" | "light" | "dark">("auto");
+  const stateRef = useRef(st);
+  stateRef.current = st;
+
+  useEffect(() => {
+    audio.onPositions = setPlayPos;
+    audio.onError = (m) => setMessage(`Audio error: ${m}`);
+    (window as unknown as { __sidbloom: unknown }).__sidbloom = audio; // handy for end-to-end tests
+  }, [audio]);
+
+  useEffect(() => { document.documentElement.dataset.theme = theme === "auto" ? "" : theme; }, [theme]);
+  useEffect(() => { document.title = `${st.dirty ? "• " : ""}${st.song.title || "Untitled"} — SIDbloom`; }, [st.dirty, st.song.title]);
+
+  // follow the playhead through the order list
+  useEffect(() => {
+    if (playPos && playPos[0][0] !== st.orderPos) dispatch({ t: "orderPos", pos: playPos[0][0] });
+  }, [playPos, st.orderPos, dispatch]);
+
+  const playing = playPos !== null;
+  const play = useCallback(async (fromCursor: boolean) => {
+    const s = stateRef.current;
+    setMessage("");
+    setPlayPos([[fromCursor ? s.orderPos : 0, fromCursor ? s.cursor.row : 0], [0, 0], [0, 0]]);
+    await audio.play(s.song, s.sid8580, fromCursor ? s.orderPos : 0, fromCursor ? s.cursor.row : 0);
+  }, [audio]);
+  const stop = useCallback(() => { audio.stop(); setPlayPos(null); }, [audio]);
+
+  const hearNote = useCallback((note: number) => {
+    const s = stateRef.current;
+    if (!playing) void audio.preview(s.song, s.curInst, note, s.sid8580);
+  }, [audio, playing]);
+
+  const save = useCallback(async () => {
+    const s = stateRef.current;
+    const name = s.fileName.endsWith(".sidb") ? s.fileName : `${slug(s.song.title)}.sidb`;
+    if (await saveFile(name, JSON.stringify(s.song, null, 2), "sidb")) setMessage(`Saved ${name}`);
+  }, []);
+  const open = useCallback(async () => {
+    const r = await openProject();
+    if (r) { stop(); dispatch({ t: "load", song: r.song, fileName: r.name }); }
+  }, [dispatch, stop]);
+
+  const doExport = useCallback(async (kind: "sid" | "prg") => {
+    const s = stateRef.current;
+    const err = validate(s.song);
+    if (err) { setMessage(`Cannot export: ${err}`); return; }
+    const bytes = kind === "sid" ? exportSid(s.song, s.sid8580) : exportPrg(s.song);
+    if (await saveFile(`${slug(s.song.title)}.${kind}`, bytes, kind)) setMessage(`Exported ${slug(s.song.title)}.${kind} (${bytes.length} bytes)`);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isTyping(e.target)) return;
+      const s = stateRef.current;
+      const mod = e.ctrlKey || e.metaKey;
+      const key = e.key;
+      const lower = key.toLowerCase();
+      const act = (a: Parameters<typeof dispatch>[0]) => { e.preventDefault(); dispatch(a); };
+      if (mod) {
+        if (lower === "z") return act({ t: e.shiftKey ? "redo" : "undo" });
+        if (lower === "y") return act({ t: "redo" });
+        if (lower === "s") { e.preventDefault(); void save(); return; }
+        if (lower === "o") { e.preventDefault(); void open(); return; }
+        if (key === "ArrowLeft") return act({ t: "orderPos", pos: s.orderPos - 1 });
+        if (key === "ArrowRight") return act({ t: "orderPos", pos: s.orderPos + 1 });
+        return;
+      }
+      if (e.altKey) return;
+      switch (key) {
+        case " ": e.preventDefault(); return void (playing ? stop() : play(false));
+        case "Enter": e.preventDefault(); return void play(true);
+        case "Escape": return stop();
+        case "ArrowUp": return act({ t: "move", drow: -1 });
+        case "ArrowDown": return act({ t: "move", drow: 1 });
+        case "ArrowLeft": return act({ t: "move", dfield: -1 });
+        case "ArrowRight": return act({ t: "move", dfield: 1 });
+        case "Tab": return act({ t: "move", dch: e.shiftKey ? -1 : 1 });
+        case "PageUp": return act({ t: "move", drow: -16 });
+        case "PageDown": return act({ t: "move", drow: 16 });
+        case "Home": return act({ t: "cursor", c: { row: 0 } });
+        case "End": return act({ t: "cursor", c: { row: 999 } });
+        case "Delete": return act({ t: "clearCell" });
+        case "Backspace": return act({ t: e.shiftKey ? "insertRow" : "clearCell", ...(e.shiftKey ? { remove: true } : { backspace: true }) } as never);
+        case "Insert": return act({ t: "insertRow" });
+        case "[": return act({ t: "octave", d: -1 });
+        case "]": return act({ t: "octave", d: 1 });
+        case "-": return act({ t: "curInst", i: s.curInst - 1 });
+        case "=": if (s.cursor.field !== 0) return act({ t: "curInst", i: s.curInst + 1 }); break;
+      }
+      if (s.cursor.field === 0) {
+        if (key === "1" || key === "`") {
+          e.preventDefault();
+          return dispatch({ t: "enterNote", note: NOTE_OFF });
+        }
+        const note = noteFromKey(key, s.octave);
+        if (note !== null && !e.shiftKey) {
+          e.preventDefault();
+          dispatch({ t: "enterNote", note });
+          hearNote(note);
+        }
+      } else if (/^[0-9a-f]$/i.test(key)) {
+        e.preventDefault();
+        dispatch({ t: "enterHex", digit: parseInt(key, 16) });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dispatch, hearNote, open, play, playing, save, stop]);
+
+  const playRows = useMemo(
+    () => [0, 1, 2].map((ch) => (playPos && playPos[ch][0] === st.orderPos ? playPos[ch][1] : null)),
+    [playPos, st.orderPos],
+  );
+  const song = st.song;
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="brand"><img className="logo" src="/favicon.svg" alt="" width={26} height={26} /> SIDbloom</div>
+        <div className="group">
+          <button onClick={() => { stop(); dispatch({ t: "load", song: newSong() }); }}>New</button>
+          <button onClick={() => void open()}>Open</button>
+          <button onClick={() => void save()}>Save</button>
+        </div>
+        <div className="group">
+          <button onClick={() => dispatch({ t: "undo" })} disabled={!st.past.length} title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+          <button onClick={() => dispatch({ t: "redo" })} disabled={!st.future.length} title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
+        </div>
+        <div className="group transport">
+          <button className="primary" onClick={() => (playing ? stop() : void play(false))} data-testid="play" aria-label={playing ? "Stop" : "Play"} title="Play / stop (Space)">
+            {playing ? "■ Stop" : "▶ Play"}
+          </button>
+          <button onClick={() => void play(true)} title="Play from cursor (Enter)">▶ From cursor</button>
+        </div>
+        <div className="group">
+          <label className="inline">Speed
+            <input type="number" min={1} max={31} value={song.speed} onChange={(e) => dispatch({ t: "edit", fn: (s) => { s.speed = Math.max(1, Math.min(31, Number(e.target.value) || 6)); } })} />
+          </label>
+          <select aria-label="Video standard" value={song.pal ? "pal" : "ntsc"} onChange={(e) => dispatch({ t: "edit", fn: (s) => { s.pal = e.target.value === "pal"; } })}>
+            <option value="pal">PAL 50 Hz</option><option value="ntsc">NTSC 60 Hz</option>
+          </select>
+          <select aria-label="SID chip" value={st.sid8580 ? "8580" : "6581"} onChange={(e) => dispatch({ t: "sid8580", v: e.target.value === "8580" })}>
+            <option value="8580">SID 8580</option><option value="6581">SID 6581</option>
+          </select>
+        </div>
+        <div className="group right">
+          <button onClick={() => void doExport("sid")} className="accent" data-testid="export-sid">Export .sid</button>
+          <button onClick={() => void doExport("prg")}>.prg</button>
+          <button onClick={() => setTheme(theme === "dark" ? "light" : theme === "light" ? "auto" : "dark")} title="Theme" aria-label="Toggle theme">◑ {theme}</button>
+        </div>
+      </header>
+
+      <div className="meta">
+        <input aria-label="Title" placeholder="Title" value={song.title} maxLength={31} onChange={(e) => dispatch({ t: "edit", fn: (s) => { s.title = e.target.value; } })} />
+        <input aria-label="Author" placeholder="Author" value={song.author} maxLength={31} onChange={(e) => dispatch({ t: "edit", fn: (s) => { s.author = e.target.value; } })} />
+        <input aria-label="Released" placeholder="Released (e.g. 2026 SIDbloom)" value={song.released} maxLength={31} onChange={(e) => dispatch({ t: "edit", fn: (s) => { s.released = e.target.value; } })} />
+        <span className="status" role="status" data-testid="status">{message}</span>
+      </div>
+
+      <main className="main">
+        <div className="left">
+          <Tracker song={song} orderPos={st.orderPos} cursor={st.cursor} playRows={playRows} onCursor={(c) => dispatch({ t: "cursor", c })} />
+          <div className="statusbar">
+            <span>Pos <b>{hex(st.orderPos)}</b></span>
+            <span>Row <b>{hex(st.cursor.row)}</b></span>
+            <span>Octave <b>{st.octave}</b></span>
+            <span>Instrument <b>{hex(st.curInst)}</b></span>
+            <label className="inline">Step <input type="number" min={0} max={16} value={st.step} onChange={(e) => dispatch({ t: "step", n: Number(e.target.value) })} /></label>
+            <Scope analyser={audio.analyser} />
+          </div>
+          <Piano octave={st.octave} onNote={(note) => { hearNote(note); if (st.cursor.field === 0) dispatch({ t: "enterNote", note }); }} />
+        </div>
+        <aside className="right-col">
+          <OrderPanel song={song} orderPos={st.orderPos} ch={st.cursor.ch} dispatch={dispatch} playOrder={playPos ? playPos[0][0] : null} />
+          <InstrumentPanel song={song} inst={st.curInst} dispatch={dispatch} onPreview={() => hearNote(58)} />
+          <FilterPanel song={song} dispatch={dispatch} />
+          <HelpPanel />
+        </aside>
+      </main>
+    </div>
+  );
+}

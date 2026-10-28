@@ -1,0 +1,68 @@
+import { memo, useEffect, useRef } from "react";
+import { cellText, hex, patternAt, rowsAt, type Song } from "../model";
+import type { Cursor } from "../store";
+
+interface Props {
+  song: Song;
+  orderPos: number;
+  cursor: Cursor;
+  playRows: (number | null)[]; // per channel: playing row in this order position, or null
+  onCursor: (c: Partial<Cursor>) => void;
+}
+
+const FIELD_CLASS = ["note", "inst", "inst", "fx", "param", "param"] as const;
+
+export const Tracker = memo(function Tracker({ song, orderPos, cursor, playRows, onCursor }: Props) {
+  const rows = rowsAt(song, orderPos);
+  const body = useRef<HTMLDivElement>(null);
+  const follow = playRows.find((r) => r !== null) ?? null;
+  useEffect(() => {
+    // keep the playhead (while playing) or the edit cursor in view
+    const el = body.current?.querySelector<HTMLElement>(follow !== null ? ".tcell.playing" : ".f.cursor");
+    el?.scrollIntoView({ block: "nearest" });
+  }, [cursor.row, cursor.ch, orderPos, follow]);
+  return (
+    <div className="tracker" role="grid" aria-label="Pattern editor" data-testid="tracker">
+      <div className="tracker-head">
+        <div className="rownum" />
+        {[0, 1, 2].map((ch) => (
+          <div key={ch} className="chan-head">
+            Voice {ch + 1}
+            <span className="pat-id">pattern {hex(song.orders[ch][orderPos] ?? 0)}</span>
+          </div>
+        ))}
+      </div>
+      <div className="tracker-body" ref={body}>
+        {Array.from({ length: rows }, (_, r) => (
+          <div key={r} className={`trow${r % 4 === 0 ? " beat" : ""}${r % 16 === 0 ? " bar" : ""}`}>
+            <div className="rownum">{hex(r)}</div>
+            {[0, 1, 2].map((ch) => {
+              const cell = patternAt(song, ch, orderPos)?.rows[r];
+              const playing = playRows[ch] === r;
+              if (!cell) return <div key={ch} className="tcell off" />;
+              const t = cellText(cell);
+              const texts = [t.note, t.inst[0], t.inst[1], t.fx, t.param[0], t.param[1]];
+              return (
+                <div key={ch} className={`tcell${playing ? " playing" : ""}${cell.note ? " has-note" : ""}`}>
+                  {texts.map((txt, f) => {
+                    const active = cursor.ch === ch && cursor.row === r && cursor.field === f;
+                    return (
+                      <span
+                        key={f}
+                        data-testid={active ? "cursor" : undefined}
+                        className={`f ${FIELD_CLASS[f]}${active ? " cursor" : ""}${txt.includes("·") ? " empty" : ""}`}
+                        onMouseDown={() => onCursor({ ch, row: r, field: f })}
+                      >
+                        {txt}
+                      </span>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});

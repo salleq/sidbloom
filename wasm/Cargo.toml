@@ -1,0 +1,14 @@
+[package]
+name = "sidbloom-wasm"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "WebAssembly bindings of sidcore for the SIDbloom UI"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+sidcore = { path = "../core" }
+wasm-bindgen = "=0.2.100"
+js-sys = "0.3"

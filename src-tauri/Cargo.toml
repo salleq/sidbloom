@@ -1,0 +1,17 @@
+[package]
+name = "sidbloom-desktop"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "SIDbloom desktop shell (Tauri)"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+
+# Not part of the root workspace: keeps `cargo test` for the core free of GUI libraries.
+[workspace]

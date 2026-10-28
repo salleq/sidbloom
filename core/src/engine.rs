@@ -51,6 +51,23 @@ impl Engine {
 
     pub fn song(&self) -> &Song { &self.song }
 
+    /// Like `new`, but starts playback at the given order position and row on every channel.
+    pub fn start_at(song: Song, order_pos: usize, row: usize) -> Self {
+        let mut e = Engine::new(song);
+        for ch in 0..CHANNELS {
+            let len = e.song.orders[ch].len().max(1);
+            let op = order_pos.min(len - 1);
+            e.voices[ch].order_pos = op;
+            e.voices[ch].row = row.min(e.pattern_len(ch, op) - 1);
+        }
+        e
+    }
+
+    /// Current (order position, row) of each channel; valid after the first `tick()`.
+    pub fn positions(&self) -> [(usize, usize); CHANNELS] {
+        std::array::from_fn(|ch| (self.voices[ch].order_pos, self.voices[ch].row))
+    }
+
     /// True once every channel has wrapped its order list at least once.
     pub fn looped(&self) -> bool { self.voices.iter().all(|v| v.wrapped) }
 

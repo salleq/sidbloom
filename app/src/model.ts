@@ -1,0 +1,92 @@
+// Mirrors core/src/model.rs (serde JSON).
+export const NOTE_OFF = 0xff;
+export const FX_NONE = 0xff;
+export const CHANNELS = 3;
+
+export const FX = { ARPEGGIO: 0x0, SLIDE_UP: 0x1, SLIDE_DOWN: 0x2, VIBRATO: 0x4, SET_SPEED: 0xf } as const;
+export const FX_HELP: Record<number, string> = {
+  0x0: "Arpeggio (x,y semitones)",
+  0x1: "Slide up (units/tick)",
+  0x2: "Slide down (units/tick)",
+  0x4: "Vibrato (speed, depth)",
+  0xf: "Set speed (ticks/row)",
+};
+export const VALID_FX = Object.keys(FX_HELP).map(Number);
+
+export interface Cell { note: number; inst: number; fx: number; fx_param: number }
+export interface Pattern { rows: Cell[] }
+export interface WaveStep { wave: number; semis: number }
+export interface Instrument {
+  name: string;
+  attack_decay: number;
+  sustain_release: number;
+  pulse_width: number;
+  wave_table: WaveStep[];
+  wave_loop: number | null;
+}
+export interface FilterSettings { cutoff: number; resonance: number; routing: number; mode: number; volume: number }
+export interface Song {
+  title: string;
+  author: string;
+  released: string;
+  pal: boolean;
+  speed: number;
+  filter: FilterSettings;
+  patterns: Pattern[];
+  orders: [number[], number[], number[]];
+  instruments: Instrument[];
+}
+
+export const LIMITS = { instruments: 32, patterns: 64, rows: 64, waveSteps: 128 };
+
+export const emptyCell = (): Cell => ({ note: 0, inst: 0, fx: FX_NONE, fx_param: 0 });
+export const emptyPattern = (len = 32): Pattern => ({ rows: Array.from({ length: len }, emptyCell) });
+
+export const WAVE_BITS = [
+  { bit: 0x10, label: "Tri" },
+  { bit: 0x20, label: "Saw" },
+  { bit: 0x40, label: "Pulse" },
+  { bit: 0x80, label: "Noise" },
+  { bit: 0x04, label: "Ring" },
+  { bit: 0x02, label: "Sync" },
+] as const;
+
+const NAMES = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"];
+export function noteName(n: number): string {
+  if (n === 0) return "···";
+  if (n === NOTE_OFF) return "===";
+  const v = n - 1;
+  return NAMES[v % 12] + Math.floor(v / 12);
+}
+export const hex = (v: number, digits = 2) => v.toString(16).toUpperCase().padStart(digits, "0");
+
+export function cellText(c: Cell) {
+  return {
+    note: noteName(c.note),
+    inst: c.inst ? hex(c.inst) : "··",
+    fx: c.fx === FX_NONE ? "·" : hex(c.fx, 1),
+    param: c.fx === FX_NONE ? "··" : hex(c.fx_param),
+  };
+}
+
+/** Pattern lookup helpers (order lists may differ in length in imported songs). */
+export const orderLength = (s: Song) => Math.max(...s.orders.map((o) => o.length));
+export const patternAt = (s: Song, ch: number, pos: number): Pattern | undefined => {
+  const idx = s.orders[ch][pos];
+  return idx === undefined ? undefined : s.patterns[idx];
+};
+export const rowsAt = (s: Song, pos: number) => Math.max(1, ...[0, 1, 2].map((ch) => patternAt(s, ch, pos)?.rows.length ?? 0));
+
+export const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/** Tracker piano: key -> semitone offset from the current octave's C. */
+export const PIANO_KEYS: Record<string, number> = {
+  z: 0, s: 1, x: 2, d: 3, c: 4, v: 5, g: 6, b: 7, h: 8, n: 9, j: 10, m: 11, ",": 12, l: 13, ".": 14, ";": 15, "/": 16,
+  q: 12, "2": 13, w: 14, "3": 15, e: 16, r: 17, "5": 18, t: 19, "6": 20, y: 21, "7": 22, u: 23, i: 24, "9": 25, o: 26, "0": 27, p: 28,
+};
+export const noteFromKey = (key: string, octave: number): number | null => {
+  const off = PIANO_KEYS[key.toLowerCase()];
+  if (off === undefined) return null;
+  const n = octave * 12 + off + 1;
+  return n >= 1 && n <= 95 ? n : null;
+};

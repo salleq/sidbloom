@@ -1,3 +1,7 @@
 /target
-/core/target
+/src-tauri/target
 node_modules/
+dist/
+app/src/wasm/
+app/e2e/shots/
+src-tauri/gen/
