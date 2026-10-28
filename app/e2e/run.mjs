@@ -144,7 +144,41 @@ try {
   assert.ok((await energy()) > 1, "chord instrument silent");
   step("chord editor works and chord instrument plays");
 
+  // import a MIDI file: pick which part goes to which voice
+  const vlq = (n) => { const o = [n & 0x7f]; n >>= 7; while (n) { o.unshift((n & 0x7f) | 0x80); n >>= 7; } return o; };
+  const trk = (ev) => { const b = ev.flatMap(([d, ...e]) => [...vlq(d), ...e]).concat([0, 0xff, 0x2f, 0]); return Buffer.concat([Buffer.from("MTrk"), Buffer.from([0, 0, b.length >> 8, b.length & 255]), Buffer.from(b)]); };
+  const midi = Buffer.concat([
+    Buffer.from([0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1, 0, 2, 1, 0xe0]), // format 1, 2 tracks, 480 ppq
+    trk([[0, 0xff, 0x03, 4, 0x4c, 0x65, 0x61, 0x64], [0, 0xff, 0x51, 3, 7, 0xa1, 0x20], [0, 0x90, 69, 100], [480, 0x80, 69, 0], [0, 0x90, 71, 100], [480, 0x80, 71, 0]]),
+    trk([[0, 0xff, 0x03, 4, 0x42, 0x61, 0x73, 0x73], [0, 0x91, 45, 100], [960, 0x81, 45, 0]]),
+  ]);
+  const [mc] = await Promise.all([page.waitForEvent("filechooser"), page.getByTestId("import-mid").click()]);
+  await mc.setFiles({ name: "tune.mid", mimeType: "audio/midi", buffer: midi });
+  await page.getByTestId("midi-dialog").waitFor();
+  const dlg = page.getByTestId("midi-dialog");
+  assert.equal(await dlg.getByLabel("Voice 1").inputValue(), "0", "busiest part preselected");
+  await dlg.getByLabel("Voice 1").selectOption("1"); // bass
+  await dlg.getByLabel("Voice 2").selectOption("0"); // lead
+  await page.getByTestId("midi-import-go").click();
+  await page.waitForFunction(() => document.title.includes("Lead"));
+  assert.match(await page.locator(".trow").first().innerText(), /A-4/, "voice 2 plays the lead's A4 on row 0");
+  assert.match(await page.getByTestId("status").innerText(), /Imported tune\.mid/);
+  step("MIDI file imported through the dialog");
+  // cancelling changes nothing
+  const [mc2] = await Promise.all([page.waitForEvent("filechooser"), page.getByTestId("import-mid").click()]);
+  await mc2.setFiles({ name: "tune.mid", mimeType: "audio/midi", buffer: midi });
+  await page.getByTestId("midi-dialog").waitFor();
+  await page.keyboard.press("Escape");
+  await page.getByTestId("midi-dialog").waitFor({ state: "detached" });
+  // not a MIDI file: clear message, no dialog
+  const [mc3] = await Promise.all([page.waitForEvent("filechooser"), page.getByTestId("import-mid").click()]);
+  await mc3.setFiles({ name: "x.mid", mimeType: "audio/midi", buffer: Buffer.from("not midi at all") });
+  await page.waitForFunction(() => /not a MIDI file/.test(document.querySelector("[data-testid=status]").textContent));
+  step("cancel and bad MIDI files handled");
+
   // MIDI keyboard: notes play and are written at the cursor; Rec off only plays
+  await page.getByLabel("MIDI input").focus(); // devices are listed (and permission asked) on first use
+  await page.waitForFunction(() => [...document.querySelectorAll("[aria-label='MIDI input'] option")].some((o) => o.textContent === "Test Keyboard"));
   await page.getByLabel("MIDI input").selectOption("Test Keyboard");
   await page.locator(".trow").nth(2).locator(".f.note").first().click();
   assert.doesNotMatch(await page.locator(".trow").nth(2).innerText(), /A-4/);

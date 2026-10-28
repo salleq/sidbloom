@@ -51,6 +51,23 @@ export function openProject(): Promise<{ song: Song; name: string } | null> {
   });
 }
 
+/** Picks a MIDI file. */
+export function pickMidi(): Promise<{ bytes: Uint8Array; name: string } | null> {
+  return pickBytes(".mid,.midi,.rmi");
+}
+
+function pickBytes(accept: string): Promise<{ bytes: Uint8Array; name: string } | null> {
+  return new Promise((resolve) => {
+    const input = Object.assign(document.createElement("input"), { type: "file", accept });
+    input.onchange = async () => {
+      const f = input.files?.[0];
+      resolve(f ? { bytes: new Uint8Array(await f.arrayBuffer()), name: f.name } : null);
+    };
+    input.oncancel = () => resolve(null);
+    input.click();
+  });
+}
+
 /** Picks a SID-Wizard module and returns its bytes. */
 export function pickSwm(): Promise<{ bytes: Uint8Array; name: string } | null> {
   return new Promise((resolve) => {

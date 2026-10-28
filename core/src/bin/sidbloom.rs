@@ -9,6 +9,7 @@ const USAGE: &str = "usage:
   sidbloom render <in.sidb> <out.wav> [seconds]  render to WAV (reSID, 8580)
   sidbloom export-sid <in.sidb> <out.sid> [--8580]
   sidbloom export-prg <in.sidb> <out.prg>
+  sidbloom import-mid <in.mid> <out.sidb>   import a MIDI file (the three busiest parts)
   sidbloom import-swm <in.swm|.prg|.p00> <out.sidb>   import a SID-Wizard 1.x module";
 
 fn run(args: &[String]) -> Result<(), String> {
@@ -28,6 +29,19 @@ fn run(args: &[String]) -> Result<(), String> {
         "export-prg" => {
             let song = project::load(Path::new(a(1)?)).map_err(|e| e.to_string())?;
             fs::write(a(2)?, export_prg(&song).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+        }
+        "import-mid" => {
+            use sidcore::import::midi::{default_assignment, import_midi, list_parts};
+            let bytes = fs::read(a(1)?).map_err(|e| e.to_string())?;
+            let parts = list_parts(&bytes).map_err(|e| e.to_string())?;
+            for (i, p) in parts.iter().enumerate() {
+                eprintln!("part {i}: {} — {} notes, keys {}..{}{}", p.name, p.notes, p.min, p.max, if p.drum { " (drums)" } else { "" });
+            }
+            let imp = import_midi(&bytes, default_assignment(&parts)).map_err(|e| e.to_string())?;
+            for w in &imp.warnings {
+                eprintln!("note: {w}");
+            }
+            project::save(&imp.song, Path::new(a(2)?)).map_err(|e| e.to_string())
         }
         "import-swm" => {
             let bytes = fs::read(a(1)?).map_err(|e| e.to_string())?;

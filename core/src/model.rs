@@ -19,7 +19,7 @@ pub mod fx {
     pub const NONE: u8 = 0xFF;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Cell {
     /// 0 = empty, 1..=95 = C-0..B-7, NOTE_OFF = gate off
     pub note: u8,

@@ -4,10 +4,11 @@ import { Tracker } from "./components/Tracker";
 import { Piano, Scope } from "./components/Widgets";
 import { AudioEngine, type Positions } from "./audio";
 import { createMidiBackend, trackerNote, type MidiNote } from "./midi";
-import { openProject, pickSwm, saveFile } from "./files";
+import { openProject, pickMidi, pickSwm, saveFile } from "./files";
+import { MidiDialog } from "./components/MidiDialog";
 import { NOTE_OFF, hex, noteFromKey, type Song } from "./model";
 import { useStore } from "./store";
-import { exportPrg, exportSid, importSwm, newSong, projectFits, validate } from "./wasm";
+import { exportPrg, exportSid, importMidi, importSwm, midiParts, newSong, projectFits, validate, type MidiPart } from "./wasm";
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA") && (t as HTMLInputElement).type !== "checkbox" && (t as HTMLInputElement).type !== "range";
@@ -65,14 +66,15 @@ export function App({ initial }: { initial: Song }) {
     if (midiRecRef.current && !playingRef.current) dispatch({ t: "enterNote", note });
   }, [audio, dispatch]);
 
-  const refreshMidi = useCallback(async () => {
+  // `silent`: called at start-up, where a refused permission must not produce a message
+  const refreshMidi = useCallback(async (silent = false) => {
     if (!midi) return;
     try {
       const ports = await midi.ports();
       setMidiPorts(ports);
       setMidiPort((cur) => (cur && !ports.includes(cur) ? "" : cur));
     } catch (e) {
-      setMessage(`MIDI unavailable: ${e instanceof Error ? e.message : e}`);
+      if (!silent) setMessage(`MIDI unavailable: ${e instanceof Error ? e.message : e}`);
     }
   }, [midi]);
 
@@ -90,7 +92,14 @@ export function App({ initial }: { initial: Song }) {
   useEffect(() => {
     if (!midi) return;
     void (async () => {
-      await refreshMidi();
+      // A browser asks the user for permission the first time MIDI is used; do not ask at start-up.
+      // The desktop app needs no permission; a browser that already granted it can list the devices.
+      let allowed = midi.kind === "tauri";
+      if (!allowed) {
+        try { allowed = (await navigator.permissions.query({ name: "midi" as PermissionName })).state === "granted"; } catch { /* unsupported */ }
+      }
+      if (!allowed) return;
+      await refreshMidi(true);
       let saved = "";
       try { saved = localStorage.getItem("sidbloom.midi") ?? ""; } catch { /* ignore */ }
       if (saved) {
@@ -137,6 +146,32 @@ export function App({ initial }: { initial: Song }) {
       setMessage(`Cannot import ${f.name}: ${e instanceof Error ? e.message : e}`);
     }
   }, [dispatch, stop]);
+
+  const [midiImport, setMidiImport] = useState<{ name: string; bytes: Uint8Array; parts: MidiPart[]; initial: (number | null)[] } | null>(null);
+  const startMidiImport = useCallback(async () => {
+    const f = await pickMidi();
+    if (!f) return;
+    try {
+      const r = midiParts(f.bytes);
+      setMidiImport({ name: f.name, bytes: f.bytes, parts: r.parts, initial: r.default });
+    } catch (e) {
+      setMessage(`Cannot import ${f.name}: ${e instanceof Error ? e.message : e}`);
+    }
+  }, []);
+  const finishMidiImport = useCallback((voices: (number | null)[]) => {
+    const m = midiImport;
+    setMidiImport(null);
+    if (!m) return;
+    try {
+      const r = importMidi(m.bytes, voices);
+      stop();
+      dispatch({ t: "load", song: r.song, fileName: m.name.replace(/\.(mid|midi|rmi)$/i, "") + ".sidb" });
+      setNotes(r.warnings);
+      setMessage(`Imported ${m.name}${r.warnings.length ? ` — ${r.warnings.length} notes about the conversion` : ""}`);
+    } catch (e) {
+      setMessage(`Cannot import ${m.name}: ${e instanceof Error ? e.message : e}`);
+    }
+  }, [midiImport, dispatch, stop]);
 
   const doExport = useCallback(async (kind: "sid" | "prg") => {
     const s = stateRef.current;
@@ -223,6 +258,7 @@ export function App({ initial }: { initial: Song }) {
           <button onClick={() => void open()} title="Open a .sidb project, or a .sid / .prg exported by SIDbloom (Ctrl+O)">Open</button>
           <button onClick={() => void save()}>Save</button>
           <button onClick={() => void importSidWizard()} title="Import a SID-Wizard 1.x module (.swm)" data-testid="import-swm">Import SW…</button>
+          <button onClick={() => void startMidiImport()} title="Import a MIDI file (.mid)" data-testid="import-mid">Import MIDI…</button>
         </div>
         <div className="group">
           <button onClick={() => dispatch({ t: "undo" })} disabled={!st.past.length} title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
@@ -247,8 +283,8 @@ export function App({ initial }: { initial: Song }) {
         </div>
         {midi && (
           <div className="group" title="Play notes from a MIDI keyboard">
-            <select aria-label="MIDI input" value={midiPort} onFocus={() => void refreshMidi()} onChange={(e) => void chooseMidi(e.target.value)}>
-              <option value="">MIDI: off</option>
+            <select aria-label="MIDI input" value={midiPort} onFocus={() => void refreshMidi()} onMouseDown={() => void refreshMidi()} onChange={(e) => void chooseMidi(e.target.value)}>
+              <option value="">{midiPorts.length || midi.kind === "tauri" ? "MIDI: off" : "MIDI: choose…"}</option>
               {midiPorts.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
             <label className="chip"><input type="checkbox" checked={midiRec} onChange={() => setMidiRec(!midiRec)} aria-label="Record MIDI notes into the pattern" /><span title="Write played notes into the pattern at the cursor">Rec</span></label>
@@ -270,11 +306,13 @@ export function App({ initial }: { initial: Song }) {
 
       {notes.length > 0 && (
         <details className="import-notes" data-testid="import-notes">
-          <summary>{notes.length} things in the imported song were approximated or left out</summary>
+          <summary>{notes.length} notes about the imported song (things approximated or left out)</summary>
           <ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
           <button onClick={() => setNotes([])}>Dismiss</button>
         </details>
       )}
+
+      {midiImport && <MidiDialog fileName={midiImport.name} parts={midiImport.parts} initial={midiImport.initial} onImport={finishMidiImport} onCancel={() => setMidiImport(null)} />}
 
       <main className="main">
         <div className="left">

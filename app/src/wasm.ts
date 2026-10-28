@@ -13,3 +13,8 @@ export const exportPrg = (s: Song) => w.export_prg(JSON.stringify(s));
 export const importSwm = (bytes: Uint8Array): { song: Song; warnings: string[] } => JSON.parse(w.import_swm(bytes));
 export const extractProject = (bytes: Uint8Array): Song => JSON.parse(w.extract_project(bytes));
 export const projectFits = (s: Song) => w.project_fits(JSON.stringify(s));
+
+export interface MidiPart { track: number; channel: number; name: string; notes: number; min: number; max: number; drum: boolean }
+export const midiParts = (bytes: Uint8Array): { parts: MidiPart[]; default: (number | null)[] } => JSON.parse(w.midi_parts(bytes));
+export const importMidi = (bytes: Uint8Array, voices: (number | null)[]): { song: Song; warnings: string[] } =>
+  JSON.parse(w.import_midi(bytes, voices[0] ?? -1, voices[1] ?? -1, voices[2] ?? -1));

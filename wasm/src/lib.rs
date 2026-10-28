@@ -91,3 +91,31 @@ pub fn extract_project(bytes: &[u8]) -> Result<String, JsError> {
 pub fn project_fits(song_json: &str) -> Result<bool, JsError> {
     Ok(export::project_fits(&parse(song_json)?))
 }
+
+/// The importable parts of a MIDI file and the suggested voice assignment, as JSON:
+/// `{"parts":[{track,channel,name,notes,min,max,drum}],"default":[part|null,part|null,part|null]}`.
+#[wasm_bindgen]
+pub fn midi_parts(bytes: &[u8]) -> Result<String, JsError> {
+    use sidcore::import::midi::{default_assignment, list_parts};
+    let parts = list_parts(bytes).map_err(|e| JsError::new(&format!("{e}")))?;
+    let default = default_assignment(&parts);
+    Ok(format!(
+        "{{\"parts\":{},\"default\":{}}}",
+        serde_json::to_string(&parts).map_err(|e| JsError::new(&e.to_string()))?,
+        serde_json::to_string(&default).map_err(|e| JsError::new(&e.to_string()))?
+    ))
+}
+
+/// Imports a MIDI file; `voiceN` is the part index for that SID voice, or -1 for silence.
+/// Returns JSON `{"song": ..., "warnings": [...]}`.
+#[wasm_bindgen]
+pub fn import_midi(bytes: &[u8], voice1: i32, voice2: i32, voice3: i32) -> Result<String, JsError> {
+    let pick = |v: i32| usize::try_from(v).ok();
+    let imp = sidcore::import::midi::import_midi(bytes, [pick(voice1), pick(voice2), pick(voice3)])
+        .map_err(|e| JsError::new(&format!("{e}")))?;
+    Ok(format!(
+        "{{\"song\":{},\"warnings\":{}}}",
+        serde_json::to_string(&imp.song).map_err(|e| JsError::new(&e.to_string()))?,
+        serde_json::to_string(&imp.warnings).map_err(|e| JsError::new(&e.to_string()))?
+    ))
+}

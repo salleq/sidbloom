@@ -38,8 +38,7 @@ and export real `.sid` files that play on a C64 or in any SID player.
 **Step** (status bar) sets how many rows the cursor moves after entering a note; 0 keeps it in place.
 
 ### Playing with a MIDI keyboard
-Connect the keyboard before starting SIDbloom (or choose it again from the list). In the top bar open **MIDI: off** and pick
-your keyboard. Keys now sound with the selected instrument and, while **Rec** is on, are written into the pattern at the
+Connect the keyboard, open the **MIDI** menu in the top bar and pick it (in a web browser the first click asks for permission to use MIDI devices). Keys now sound with the selected instrument and, while **Rec** is on, are written into the pattern at the
 cursor exactly like the computer-keyboard piano (then the cursor moves by **Step** rows). Turn **Rec** off to just play.
 Middle C (MIDI 60) is C-4. Notes outside C-0 … B-7 are ignored; velocity is ignored. While a song is playing, the
 keyboard only sounds. On macOS the first start may ask for permission to use MIDI devices.
@@ -96,6 +95,10 @@ The SID has one filter shared by all voices. Choose which voices go through it, 
 - **Export .sid:** the standard format, plays in VICE, SIDPlay, Winamp plug-ins, a SID player on a real C64 or
   SIDs on a SD card. SID 6581 / 8580 and PAL / NTSC are written into the file.
 - **.prg:** a program that starts itself: `LOAD"*",8,1` then `RUN`.
+- **Import MIDI…:** opens a standard MIDI file (`.mid`). A dialog lists its parts (tracks or channels) and lets you pick one
+  for each of the three voices; the busiest three are preselected. A SID voice plays one note at a time, so chords are reduced
+  to their highest note, the drum channel becomes a noise instrument, and timing is rounded to four rows per beat. Only the first
+  tempo is used. What was changed is listed in the report above the editor.
 - **Import SW…:** opens a SID-Wizard 1.x module (`.swm`, or `.prg` / `.p00` of one). Anything this tracker cannot
   represent is approximated and listed in a report above the editor.
 
