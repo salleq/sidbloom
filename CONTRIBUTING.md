@@ -27,3 +27,7 @@ register writes.** A new effect or instrument feature therefore touches both, pl
 ## Style
 Match the surrounding code. Keep user-visible text clear and plain; say what an import or export could not do instead of
 hiding it. Add a line to `CHANGELOG.md` under *Unreleased* for anything a user would notice.
+
+## Screenshots
+The images in `docs/screenshots/` come from `cd app && npm run build && npm run screenshots`. Regenerate them when the
+interface changes noticeably.

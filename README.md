@@ -5,6 +5,8 @@ Compose C64 music with a clearer interface and export real, C64-compatible `.sid
 
 **Status:** early but working. You can write music, hear it, and export real `.sid` files.
 
+![SIDbloom playing its demo song](docs/screenshots/editor-light.png)
+
 - Tracker UI (React + Tauri): 3 voices, order list, instrument editor (ADSR, waveform table, pulse width + sweep, chords), filter and filter effects (cutoff, resonance, mode, sweep), undo/redo, piano keyboard, oscilloscope, light/dark theme
 - Realtime audio: the same Rust engine + reSID, compiled to WebAssembly, running in an AudioWorklet; edits made during playback are heard immediately without restarting
 - Export `.sid` (PSID v2, PAL/NTSC, 6581/8580) and a self-starting `.prg` (`LOAD"*",8,1` + `RUN`) with an own 6502 player; verified register-for-register against the engine in a 6502 emulator and played back by the independent `sidplayfp`
@@ -16,6 +18,14 @@ Compose C64 music with a clearer interface and export real, C64-compatible `.sid
 Planned: more effects. MIDI keyboard input is implemented and tested with a simulated keyboard; it has not been tried with real hardware yet.
 
 See the **[user guide](docs/USER_GUIDE.md)**, the **[changelog](CHANGELOG.md)** and the **[releases](https://github.com/salleq/sidbloom/releases)**. Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Screenshots
+| | |
+|---|---|
+| ![Dark theme](docs/screenshots/editor-dark.png) | ![MIDI import: choose a part for each voice](docs/screenshots/midi-import.png) |
+| *Dark theme (follows the system setting)* | *MIDI import: choose which part plays on each voice* |
+
+<p align="center"><img src="docs/screenshots/instrument-filter.png" alt="Song order, instrument, chord and filter panels" width="260"></p>
 
 ## Download and install
 Installers are built for every platform by GitHub Actions (see the **Desktop build** runs under *Actions*, artifacts at the
