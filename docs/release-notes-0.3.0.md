@@ -1,4 +1,4 @@
-## SIDbloom 0.1.0 — first public preview
+## SIDbloom 0.3.0
 
 A modern, free and open-source tracker for three-voice C64 SID music. Write music, hear it, and export real C64 files.
 
