@@ -104,6 +104,8 @@ try {
   assert.match(await page.locator(".trow").first().innerText(), /A-4/);
   await page.getByLabel("Rows").fill("16");
   assert.equal(await page.locator(".trow").count(), 16, "rows changes all voices");
+  // leave the Rows input first: shortcuts are ignored while typing, and only Linux/Windows Chromium map Ctrl+Z to a native input undo
+  await page.locator(".tracker").click({ position: { x: 5, y: 5 } });
   await page.keyboard.press("Control+z");
   await page.getByText("Linked patterns").click();
   assert.equal((await page.locator(".order-row").first().innerText()).replace(/\s+/g, " ").trim(), "00 00 01 02");
