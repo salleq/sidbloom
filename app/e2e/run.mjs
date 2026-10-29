@@ -210,6 +210,7 @@ try {
   step("imported song switched to linked patterns");
 
   // instrument editing changes the song and is undoable
+  await page.getByTestId("tab-inst").click();
   await page.getByLabel("Name").fill("My lead");
   assert.equal(await page.getByLabel("Name").inputValue(), "My lead");
   await page.screenshot({ path: `${shots}/ui.png` });
@@ -220,10 +221,12 @@ try {
     for (let i = 0; i < 60; i++) { const b = new Float32Array(a.fftSize); a.getFloatTimeDomainData(b); e += b.reduce((s, v) => s + Math.abs(v), 0); await new Promise((r) => setTimeout(r, 30)); }
     return e;
   });
+  await page.getByTestId("tab-chords").click();
   await page.getByRole("button", { name: "＋ Chord" }).click();
   assert.equal(await page.getByLabel("Chord 1 notes").inputValue(), "0 4 7");
   await page.getByLabel("Chord 1 notes").fill("0 12");
   await page.getByLabel("Chord 1 notes").press("Enter");
+  await page.getByTestId("tab-inst").click();
   await page.getByLabel("Default chord").selectOption("1");
   assert.equal(await page.getByLabel("Default chord").inputValue(), "1");
   await page.getByRole("button", { name: /Test/ }).click();
@@ -256,6 +259,7 @@ try {
   assert.match(dialogText, /not a SIDbloom instrument/);
   step(`${presets.length} library instruments play; .sidi export and import work`);
 
+  await page.getByTestId("tab-song").click();
   // import a MIDI file: pick which part goes to which voice
   const vlq = (n) => { const o = [n & 0x7f]; n >>= 7; while (n) { o.unshift((n & 0x7f) | 0x80); n >>= 7; } return o; };
   const trk = (ev) => { const b = ev.flatMap(([d, ...e]) => [...vlq(d), ...e]).concat([0, 0xff, 0x2f, 0]); return Buffer.concat([Buffer.from("MTrk"), Buffer.from([0, 0, b.length >> 8, b.length & 255]), Buffer.from(b)]); };
@@ -294,7 +298,7 @@ try {
   await page.getByLabel("MIDI input").selectOption("Test Keyboard");
   await page.locator(".trow").nth(2).locator(".f.note").first().click();
   assert.doesNotMatch(await page.locator(".trow").nth(2).innerText(), /A-4/);
-  assert.ok((await page.getByTestId("play").innerText()).includes("Play"), "previewing must not look like playing");
+  assert.ok((await page.getByTestId("play").innerText()).includes("Pattern"), "previewing must not look like playing");
   await page.evaluate(() => window.__fakeMidi.send([0x90, 69, 100])); // A4
   await page.waitForTimeout(200);
   assert.match(await page.locator(".trow").nth(2).innerText(), /A-4/);
@@ -309,6 +313,56 @@ try {
   assert.doesNotMatch(await page.locator(".trow").nth(3).innerText(), /C-5/);
   assert.ok((await energy()) > 1, "MIDI note was not heard");
   step("MIDI note is heard and, with Rec off, not written");
+
+  // octave: buttons and keys that exist on a Finnish keyboard
+  const octave = async () => Number(await page.getByTestId("octave").innerText());
+  await page.locator(".tracker").click({ position: { x: 5, y: 5 } });
+  const o0 = await octave();
+  await page.keyboard.press("<");
+  assert.equal(await octave(), o0 - 1, "< lowers the octave");
+  await page.keyboard.press(">");
+  await page.keyboard.press("F2");
+  assert.equal(await octave(), o0 + 1, "> and F2 raise the octave");
+  await page.getByLabel("Octave down").click();
+  await page.keyboard.press("F1");
+  assert.equal(await octave(), o0 - 1, "buttons and F1");
+  await page.getByLabel("Octave up").click();
+  step("octave changes with buttons, < > and F1 F2");
+
+  // Space loops the current pattern, Shift+Space plays the song, double-click on the song order plays that pattern
+  await page.getByTestId("tab-song").click();
+  await page.getByRole("button", { name: "+ Position" }).click();
+  await page.locator(".order-row").nth(0).click();
+  await page.locator(".tracker").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("Space");
+  await page.waitForSelector(".order-row.playing");
+  await page.waitForTimeout(600);
+  assert.ok((await page.getByTestId("play").innerText()).includes("Stop"));
+  assert.equal(await page.locator(".order-row.playing").count(), 1);
+  assert.ok((await page.locator(".order-row").nth(0).getAttribute("class")).includes("playing"), "loops position 0");
+  await page.locator(".order-row").nth(1).click();
+  await page.waitForFunction(() => document.querySelectorAll(".order-row")[1]?.classList.contains("playing"));
+  step("Space loops the current pattern; selecting another position moves the loop");
+  await page.keyboard.press("Space");
+  await page.waitForFunction(() => !document.querySelector(".order-row.playing"));
+  await page.locator(".order-row").nth(0).dblclick();
+  await page.waitForFunction(() => document.querySelectorAll(".order-row")[0]?.classList.contains("playing"));
+  await page.locator(".tracker").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("Space");
+  await page.keyboard.press("Shift+Space");
+  await page.waitForSelector(".order-row.playing");
+  assert.ok((await page.getByTestId("play").innerText()).includes("Stop"), "whole song plays");
+  await page.keyboard.press("Space");
+  await page.waitForFunction(() => !document.querySelector(".order-row.playing"));
+  step("double-click plays a pattern; Shift+Space plays the song");
+
+  // the side panels are tabs: one at a time, and the choice is remembered
+  await page.getByTestId("tab-filter").click();
+  assert.equal(await page.locator(".tab-body .panel").count(), 1);
+  await page.reload();
+  await page.waitForSelector("[data-testid=tracker]");
+  assert.equal(await page.getByTestId("tab-filter").getAttribute("aria-selected"), "true", "tab remembered");
+  step("side panel tabs");
 
   // light theme + narrow window render without horizontal overflow
   await page.getByRole("button", { name: /Toggle theme/ }).click();

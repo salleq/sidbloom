@@ -29,6 +29,7 @@ export interface State {
 
 export type Action =
   | { t: "load"; song: Song; fileName?: string }
+  | { t: "saved"; fileName: string }
   | { t: "undo" }
   | { t: "redo" }
   | { t: "cursor"; c: Partial<Cursor>; extend?: boolean }
@@ -86,6 +87,7 @@ export function reducer(st: State, a: Action): State {
   switch (a.t) {
     case "load":
       return { ...initState(a.song), fileName: a.fileName ?? "untitled.sidb", sid8580: st.sid8580, octave: st.octave, clip: st.clip };
+    case "saved": return { ...st, fileName: a.fileName, dirty: false };
     case "undo": {
       if (!st.past.length) return st;
       const song = st.past[st.past.length - 1];

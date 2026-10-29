@@ -33,24 +33,79 @@ export async function confirmDiscard(what: string): Promise<boolean> {
   return window.confirm(msg);
 }
 
+/** Where a project was last saved: a path in the desktop app, a file handle in browsers that have one. */
+export interface SaveTarget { path?: string; handle?: FileSystemFileHandle }
+
+type FilePicker = { showSaveFilePicker?: (o: unknown) => Promise<FileSystemFileHandle> };
+
+/**
+ * Saves a project. With a known `target` and no `saveAs` it overwrites that file without asking; otherwise it asks where.
+ * Returns where it was saved (empty when the browser can only download), or null when cancelled.
+ */
+export async function saveProject(name: string, text: string, target: SaveTarget | null, saveAs: boolean): Promise<{ target: SaveTarget; name: string } | null> {
+  const data = new TextEncoder().encode(text);
+  if (inTauri()) {
+    let path = !saveAs ? target?.path : undefined;
+    if (!path) {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      path = (await save({ defaultPath: target?.path ?? name, filters: [{ name: "SIDbloom project", extensions: ["sidb"] }] })) ?? undefined;
+    }
+    if (!path) return null;
+    const { writeFile } = await import("@tauri-apps/plugin-fs");
+    await writeFile(path, data);
+    return { target: { path }, name: path.split(/[\\/]/).pop() ?? name };
+  }
+  const picker = (window as unknown as FilePicker).showSaveFilePicker;
+  if (picker) {
+    try {
+      const handle = !saveAs && target?.handle ? target.handle : await picker.call(window, { suggestedName: name, types: [{ description: "SIDbloom project", accept: { "application/json": [".sidb"] } }] });
+      const w = await handle.createWritable();
+      await w.write(data as BlobPart);
+      await w.close();
+      return { target: { handle }, name: handle.name };
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return null;
+      throw e;
+    }
+  }
+  return (await saveFile(name, data, "sidb")) ? { target: {}, name } : null;
+}
+
+function parseProject(name: string, bytes: Uint8Array): { song: Song; name: string } {
+  let song: Song;
+  if (/\.(sid|prg)$/i.test(name)) {
+    song = extractProject(bytes);
+  } else {
+    song = JSON.parse(new TextDecoder().decode(bytes)) as Song;
+    if (!song.patterns || !song.orders || !song.instruments) throw new Error("not a SIDbloom project");
+    song.chords ??= [];
+  }
+  return { song, name: name.replace(/\.(sid|prg)$/i, ".sidb") };
+}
+
 /** Picks a project: a `.sidb`, or a `.sid` / `.prg` that SIDbloom exported (its project is embedded). */
-export function openProject(): Promise<{ song: Song; name: string } | null> {
+export async function openProject(): Promise<{ song: Song; name: string; target: SaveTarget | null } | null> {
+  if (inTauri()) {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const { readFile } = await import("@tauri-apps/plugin-fs");
+    const path = await open({ multiple: false, filters: [{ name: "SIDbloom project or export", extensions: ["sidb", "json", "sid", "prg"] }] });
+    if (typeof path !== "string") return null;
+    const base = path.split(/[\\/]/).pop() ?? path;
+    try {
+      const r = parseProject(base, await readFile(path));
+      return { ...r, target: /\.(sid|prg)$/i.test(base) ? null : { path } };
+    } catch (e) {
+      alert(`Could not open ${base}: ${e instanceof Error ? e.message : e}`);
+      return null;
+    }
+  }
   return new Promise((resolve) => {
     const input = Object.assign(document.createElement("input"), { type: "file", accept: ".sidb,.json,.sid,.prg" });
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return resolve(null);
       try {
-        const bytes = new Uint8Array(await f.arrayBuffer());
-        let song: Song;
-        if (/\.(sid|prg)$/i.test(f.name)) {
-          song = extractProject(bytes);
-        } else {
-          song = JSON.parse(new TextDecoder().decode(bytes)) as Song;
-          if (!song.patterns || !song.orders || !song.instruments) throw new Error("not a SIDbloom project");
-          song.chords ??= [];
-        }
-        resolve({ song, name: f.name.replace(/\.(sid|prg)$/i, ".sidb") });
+        resolve({ ...parseProject(f.name, new Uint8Array(await f.arrayBuffer())), target: null });
       } catch (e) {
         alert(`Could not open ${f.name}: ${e instanceof Error ? e.message : e}`);
         resolve(null);

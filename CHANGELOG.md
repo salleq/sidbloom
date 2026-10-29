@@ -12,7 +12,13 @@ All notable changes to SIDbloom are listed here. The format follows
 - Select cells with the mouse (drag) or Shift+arrows; copy, cut and paste them with Ctrl+C / X / V or the new buttons. Del clears the selection.
 - New, Open and the imports now ask before they replace a song with unsaved changes; closing the browser tab warns too.
 
+- Playback modes: **Space** loops the current pattern, **Shift+Space** (or the Song button) plays the whole song, **Enter** plays from the cursor. Double-clicking a position in the song order plays that pattern.
+- Octave buttons next to the octave number, and `<` / `>` and F1 / F2 as octave keys that work on a Finnish keyboard (F3 / F4: previous / next instrument).
+- **Save** now overwrites the file the project was opened from or last saved to; **Save As…** (Ctrl+Shift+S) asks for a new name. In browsers without file access, Save still downloads.
+
 ### Changed
+- The side column is a set of tabs (Song, Instrument, Chords, Filter, Help) instead of one long scrolling list; the instrument's pulse and waveform sections can be folded.
+- The Linux package is now called `sidbloom` (it was `si-dbloom`). The desktop entry still shows "SIDbloom". Remove the old package first: `sudo dpkg -r si-dbloom`.
 - Exported `.sid` / `.prg` files store each distinct pattern once and leave out unused ones, so switching a song to linked patterns no longer makes the file bigger.
 
 ### Fixed
