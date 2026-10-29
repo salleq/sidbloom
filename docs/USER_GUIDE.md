@@ -32,8 +32,13 @@ and export real `.sid` files that play on a C64 or in any SID player.
 | Insert / Shift+Backspace | Insert / delete a row (the rest of the pattern shifts) |
 | `[` `]` | Octave down / up |
 | `-` `=` | Previous / next instrument |
+| Drag with the mouse, or Shift+arrows | Select cells (several rows and voices) |
+| Ctrl+C / Ctrl+X / Ctrl+V | Copy, cut, paste the selection at the cursor (a single cell when nothing is selected); Del clears the selection |
 | Ctrl+Z / Ctrl+Y | Undo / redo (200 steps) |
 | Ctrl+S / Ctrl+O | Save / open a `.sidb` project |
+
+New, Open and the imports ask before they replace a song with unsaved changes. A new song gives each voice its own pattern;
+when several voices show the same pattern number in the order list they share it, and editing one changes the others.
 
 **Step** (status bar) sets how many rows the cursor moves after entering a note; 0 keeps it in place.
 

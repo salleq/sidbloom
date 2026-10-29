@@ -25,6 +25,8 @@ try {
     window.__fakeMidi = { send: (bytes) => input.onmidimessage && input.onmidimessage({ data: new Uint8Array(bytes) }) };
     navigator.requestMIDIAccess = async () => ({ inputs: new Map([["kbd1", input]]) });
   });
+  let dialogText = "", dialogAccept = true; // alerts and the "unsaved changes" question: remember the text, answer
+  page.on("dialog", async (d) => { dialogText = d.message(); await (dialogAccept ? d.accept() : d.dismiss()); });
   await page.goto(url);
   await page.waitForSelector("[data-testid=tracker]");
   const step = (s) => console.log("✓", s);
@@ -44,6 +46,50 @@ try {
   await page.keyboard.press("Control+y");
   assert.match(await page.locator(".trow").nth(1).innerText(), /C-4/);
   step("undo / redo");
+
+
+  // selection, copy and paste: drag over cells, paste elsewhere
+  const cells = page.locator(".trow");
+  await page.locator(".trow").nth(0).locator(".tcell").nth(0).locator(".f.note").hover();
+  await page.mouse.down();
+  await cells.nth(2).locator(".tcell").nth(1).locator(".f.note").hover();
+  await page.mouse.up();
+  assert.equal(await page.locator(".tcell.selected").count(), 6, "3 rows x 2 voices selected");
+  await page.keyboard.press("Control+c");
+  const src = await cells.nth(0).locator(".tcell").nth(0).innerText();
+  await cells.nth(10).locator(".tcell").nth(1).locator(".f.note").click();
+  assert.equal(await page.locator(".tcell.selected").count(), 0, "click clears the selection");
+  await page.keyboard.press("Control+v");
+  assert.equal(await cells.nth(10).locator(".tcell").nth(1).innerText(), src, "pasted cell equals the copied one");
+  assert.equal(await cells.nth(10).locator(".tcell").nth(2).innerText(), await cells.nth(0).locator(".tcell").nth(1).innerText());
+  await page.keyboard.press("Control+z");
+  assert.notEqual(await cells.nth(10).locator(".tcell").nth(1).innerText(), src, "paste is undoable");
+  step("select with the mouse, copy and paste");
+
+  // unsaved changes: New asks first; cancelling keeps the song
+  dialogText = ""; dialogAccept = false;
+  await page.locator(".topbar").getByRole("button", { name: "New", exact: true }).click();
+  await page.waitForTimeout(200);
+  assert.match(dialogText, /unsaved changes/);
+  assert.match(await page.locator(".trow").first().innerText(), /A-4/, "cancel keeps the song");
+  dialogAccept = true;
+  await page.locator(".topbar").getByRole("button", { name: "New", exact: true }).click();
+  await page.waitForFunction(() => document.title.startsWith("Untitled"));
+  // a clean new song needs no confirmation
+  dialogText = "";
+  await page.locator(".topbar").getByRole("button", { name: "New", exact: true }).click();
+  await page.waitForTimeout(200);
+  assert.equal(dialogText, "");
+  // a new song: each voice has its own pattern
+  await page.locator(".trow").nth(0).locator(".f.note").first().click();
+  await page.keyboard.press("z");
+  assert.doesNotMatch(await page.locator(".trow").nth(0).locator(".tcell").nth(1).innerText(), /C-4/, "other voices unchanged");
+  await page.keyboard.press("Control+z");
+  step("New asks before discarding changes; voices of a new song are independent");
+
+  // the demo song again for the audio checks
+  await page.reload();
+  await page.waitForSelector("[data-testid=tracker]");
 
   // playback runs in an AudioWorklet and reports positions; output must be audible
   await page.getByTestId("play").click();
@@ -93,8 +139,7 @@ try {
   assert.match(await page.locator(".trow").first().innerText(), /A-4/);
   step("exported .sid opened again for editing");
   // a .sid that SIDbloom did not export gives a clear message
-  let dialogText = "";
-  page.once("dialog", async (d) => { dialogText = d.message(); await d.accept(); });
+  dialogText = "";
   const [fc2] = await Promise.all([page.waitForEvent("filechooser"), page.locator(".topbar").getByRole("button", { name: "Open", exact: true }).click()]);
   await fc2.setFiles({ name: "other.sid", mimeType: "application/octet-stream", buffer: Buffer.concat([Buffer.from("PSID"), Buffer.alloc(2), Buffer.from("x".repeat(200))]) });
   await page.waitForTimeout(300);

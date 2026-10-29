@@ -1,18 +1,19 @@
 import { memo, useEffect, useRef } from "react";
 import { cellText, hex, patternAt, rowsAt, type Song } from "../model";
-import type { Cursor } from "../store";
+import type { Cursor, Rect } from "../store";
 
 interface Props {
   song: Song;
   orderPos: number;
   cursor: Cursor;
+  sel: Rect | null; // selected cells (null: only the cursor)
   playRows: (number | null)[]; // per channel: playing row in this order position, or null
-  onCursor: (c: Partial<Cursor>) => void;
+  onCursor: (c: Partial<Cursor>, extend?: boolean) => void;
 }
 
 const FIELD_CLASS = ["note", "inst", "inst", "fx", "param", "param"] as const;
 
-export const Tracker = memo(function Tracker({ song, orderPos, cursor, playRows, onCursor }: Props) {
+export const Tracker = memo(function Tracker({ song, orderPos, cursor, sel, playRows, onCursor }: Props) {
   const rows = rowsAt(song, orderPos);
   const body = useRef<HTMLDivElement>(null);
   const follow = playRows.find((r) => r !== null) ?? null;
@@ -39,11 +40,12 @@ export const Tracker = memo(function Tracker({ song, orderPos, cursor, playRows,
             {[0, 1, 2].map((ch) => {
               const cell = patternAt(song, ch, orderPos)?.rows[r];
               const playing = playRows[ch] === r;
+              const selected = !!sel && ch >= sel.ch0 && ch <= sel.ch1 && r >= sel.row0 && r <= sel.row1;
               if (!cell) return <div key={ch} className="tcell off" />;
               const t = cellText(cell);
               const texts = [t.note, t.inst[0], t.inst[1], t.fx, t.param[0], t.param[1]];
               return (
-                <div key={ch} className={`tcell${playing ? " playing" : ""}${cell.note ? " has-note" : ""}`}>
+                <div key={ch} className={`tcell${playing ? " playing" : ""}${selected ? " selected" : ""}${cell.note ? " has-note" : ""}`}>
                   {texts.map((txt, f) => {
                     const active = cursor.ch === ch && cursor.row === r && cursor.field === f;
                     return (
@@ -51,7 +53,8 @@ export const Tracker = memo(function Tracker({ song, orderPos, cursor, playRows,
                         key={f}
                         data-testid={active ? "cursor" : undefined}
                         className={`f ${FIELD_CLASS[f]}${active ? " cursor" : ""}${txt.includes("·") ? " empty" : ""}`}
-                        onMouseDown={() => onCursor({ ch, row: r, field: f })}
+                        onMouseDown={(e) => { if (e.button === 0) onCursor({ ch, row: r, field: f }, e.shiftKey); }}
+                        onMouseEnter={(e) => { if (e.buttons & 1) onCursor({ ch, row: r }, true); }}
                       >
                         {txt}
                       </span>

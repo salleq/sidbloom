@@ -23,6 +23,16 @@ export async function saveFile(name: string, bytes: Uint8Array | string, ext: st
   return true;
 }
 
+/** Asks before unsaved work is replaced; native dialog in the desktop app. */
+export async function confirmDiscard(what: string): Promise<boolean> {
+  const msg = `This song has unsaved changes. ${what} will discard them. Continue?`;
+  if (inTauri()) {
+    const { ask } = await import("@tauri-apps/plugin-dialog");
+    return ask(msg, { title: "Unsaved changes", kind: "warning", okLabel: "Discard changes", cancelLabel: "Cancel" });
+  }
+  return window.confirm(msg);
+}
+
 /** Picks a project: a `.sidb`, or a `.sid` / `.prg` that SIDbloom exported (its project is embedded). */
 export function openProject(): Promise<{ song: Song; name: string } | null> {
   return new Promise((resolve) => {

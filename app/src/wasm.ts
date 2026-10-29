@@ -6,7 +6,13 @@ let ready: Promise<unknown> | null = null;
 export const loadWasm = () => (ready ??= init({ module_or_path: wasmUrl }));
 
 export const demoSong = (): Song => JSON.parse(w.demo_song());
-export const newSong = (): Song => JSON.parse(w.new_song());
+export const newSong = (): Song => {
+  const s: Song = JSON.parse(w.new_song());
+  // every voice gets its own pattern, so editing one voice does not change the others
+  while (s.patterns.length < 3) s.patterns.push(structuredClone(s.patterns[0]));
+  s.orders = [[0], [1], [2]];
+  return s;
+};
 export const validate = (s: Song) => w.validate(JSON.stringify(s));
 export const exportSid = (s: Song, is8580: boolean) => w.export_sid(JSON.stringify(s), is8580);
 export const exportPrg = (s: Song) => w.export_prg(JSON.stringify(s));

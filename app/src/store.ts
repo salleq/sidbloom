@@ -6,11 +6,16 @@ import {
 
 export interface Cursor { ch: number; row: number; field: number } // field 0 note,1-2 inst,3 fx,4-5 param
 
+export interface Sel { ch: number; row: number } // anchor; the selection spans anchor..cursor
+export interface Rect { ch0: number; ch1: number; row0: number; row1: number }
+
 export interface State {
   song: Song;
   past: Song[];
   future: Song[];
   cursor: Cursor;
+  sel: Sel | null;
+  clip: Cell[][] | null; // clip[ch][row], copied cells
   orderPos: number;
   octave: number;
   curInst: number; // 1-based
@@ -24,8 +29,11 @@ export type Action =
   | { t: "load"; song: Song; fileName?: string }
   | { t: "undo" }
   | { t: "redo" }
-  | { t: "cursor"; c: Partial<Cursor> }
-  | { t: "move"; dch?: number; drow?: number; dfield?: number }
+  | { t: "cursor"; c: Partial<Cursor>; extend?: boolean }
+  | { t: "move"; dch?: number; drow?: number; dfield?: number; extend?: boolean }
+  | { t: "deselect" }
+  | { t: "copy"; cut?: boolean }
+  | { t: "paste" }
   | { t: "orderPos"; pos: number }
   | { t: "octave"; d: number }
   | { t: "curInst"; i: number }
@@ -33,12 +41,12 @@ export type Action =
   | { t: "sid8580"; v: boolean }
   | { t: "enterNote"; note: number }
   | { t: "enterHex"; digit: number }
-  | { t: "clearCell"; backspace?: boolean }
+  | { t: "clearCell"; backspace?: boolean; whole?: boolean }
   | { t: "insertRow"; remove?: boolean }
   | { t: "edit"; fn: (s: Song) => void; coalesce?: string };
 
 export function initState(song: Song): State {
-  return { song, past: [], future: [], cursor: { ch: 0, row: 0, field: 0 }, orderPos: 0, octave: 4, curInst: 1, step: 1, sid8580: true, fileName: "untitled.sidb", dirty: false };
+  return { song, past: [], future: [], cursor: { ch: 0, row: 0, field: 0 }, sel: null, clip: null, orderPos: 0, octave: 4, curInst: 1, step: 1, sid8580: true, fileName: "untitled.sidb", dirty: false };
 }
 
 const clone = <T,>(v: T): T => structuredClone(v);
@@ -59,6 +67,12 @@ function clampCursor(st: State): State {
   return { ...st, cursor: { ch: clamp(c.ch, 0, CHANNELS - 1), row: clamp(c.row, 0, rows - 1), field: clamp(c.field, 0, 5) } };
 }
 
+/** The selected cells, or just the cursor cell. */
+export function selRect(st: Pick<State, "sel" | "cursor">): Rect {
+  const a = st.sel ?? st.cursor, c = st.cursor;
+  return { ch0: Math.min(a.ch, c.ch), ch1: Math.max(a.ch, c.ch), row0: Math.min(a.row, c.row), row1: Math.max(a.row, c.row) };
+}
+
 function advance(st: State): State {
   const rows = rowsAt(st.song, st.orderPos);
   return { ...st, cursor: { ...st.cursor, row: (st.cursor.row + st.step) % rows } };
@@ -67,7 +81,7 @@ function advance(st: State): State {
 export function reducer(st: State, a: Action): State {
   switch (a.t) {
     case "load":
-      return { ...initState(a.song), fileName: a.fileName ?? "untitled.sidb", sid8580: st.sid8580, octave: st.octave };
+      return { ...initState(a.song), fileName: a.fileName ?? "untitled.sidb", sid8580: st.sid8580, octave: st.octave, clip: st.clip };
     case "undo": {
       if (!st.past.length) return st;
       const song = st.past[st.past.length - 1];
@@ -78,8 +92,32 @@ export function reducer(st: State, a: Action): State {
       const [song, ...future] = st.future;
       return clampCursor({ ...st, song, future, past: [...st.past, st.song], dirty: true });
     }
-    case "cursor":
-      return clampCursor({ ...st, cursor: { ...st.cursor, ...a.c } });
+    case "cursor": {
+      const sel = a.extend ? st.sel ?? { ch: st.cursor.ch, row: st.cursor.row } : null;
+      return clampCursor({ ...st, sel, cursor: { ...st.cursor, ...a.c } });
+    }
+    case "deselect": return st.sel ? { ...st, sel: null } : st;
+    case "copy": {
+      const r = selRect(st);
+      const clip = Array.from({ length: r.ch1 - r.ch0 + 1 }, (_, i) =>
+        Array.from({ length: r.row1 - r.row0 + 1 }, (_, j) => structuredClone(patternAt(st.song, r.ch0 + i, st.orderPos)?.rows[r.row0 + j] ?? emptyCell())));
+      const next = { ...st, clip };
+      return a.cut ? { ...reducer(next, { t: "clearCell", whole: true }), clip } : next;
+    }
+    case "paste": {
+      if (!st.clip) return st;
+      const { ch, row } = st.cursor, clip = st.clip;
+      const next = commit(st, (s) => {
+        clip.forEach((col, i) => col.forEach((cell, j) => {
+          const rows = patternAt(s, ch + i, st.orderPos)?.rows;
+          if (ch + i >= CHANNELS || !rows || row + j >= rows.length) return;
+          const c = structuredClone(cell);
+          if (c.inst > s.instruments.length) c.inst = 0;
+          rows[row + j] = c;
+        }));
+      });
+      return { ...next, sel: null };
+    }
     case "move": {
       let { ch, row, field } = st.cursor;
       const rows = rowsAt(st.song, st.orderPos);
@@ -91,11 +129,12 @@ export function reducer(st: State, a: Action): State {
       if (ch >= CHANNELS) ch = 0;
       if (ch < 0) ch = CHANNELS - 1;
       row = (row + (a.drow ?? 0) + rows) % rows;
-      return { ...st, cursor: { ch, row, field } };
+      const sel = a.extend ? st.sel ?? { ch: st.cursor.ch, row: st.cursor.row } : null;
+      return { ...st, sel, cursor: { ch, row, field } };
     }
     case "orderPos": {
       const pos = clamp(a.pos, 0, orderLength(st.song) - 1);
-      return clampCursor({ ...st, orderPos: pos });
+      return clampCursor({ ...st, orderPos: pos, sel: null });
     }
     case "octave": return { ...st, octave: clamp(st.octave + a.d, 0, 7) };
     case "curInst": return { ...st, curInst: clamp(a.i, 1, Math.max(1, st.song.instruments.length)) };
@@ -130,6 +169,16 @@ export function reducer(st: State, a: Action): State {
       return field === 2 || field === 5 ? advance({ ...next, cursor: { ...next.cursor, field: field === 2 ? 0 : 3 } }) : { ...next, cursor: { ...next.cursor, field: field + 1 } };
     }
     case "clearCell": {
+      if (st.sel || a.whole) { // clear whole cells of the selection
+        const r = selRect(st);
+        const next = commit(st, (s) => {
+          for (let c = r.ch0; c <= r.ch1; c++) {
+            const rows = patternAt(s, c, st.orderPos)?.rows;
+            for (let i = r.row0; rows && i <= r.row1 && i < rows.length; i++) rows[i] = emptyCell();
+          }
+        });
+        return { ...next, sel: a.whole ? st.sel : null };
+      }
       const { field, row, ch } = st.cursor;
       if (!cellAt(st.song, st.cursor, st.orderPos)) return st;
       const next = commit(st, (s) => {

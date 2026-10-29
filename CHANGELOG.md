@@ -6,6 +6,13 @@ All notable changes to SIDbloom are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Select cells with the mouse (drag) or Shift+arrows; copy, cut and paste them with Ctrl+C / X / V or the new buttons. Del clears the selection.
+- New, Open and the imports now ask before they replace a song with unsaved changes; closing the browser tab warns too.
+
+### Fixed
+- A new song gave all three voices the same pattern, so editing one voice edited all. Each voice now has its own pattern.
+
 ## [0.1.0] — first public preview
 
 The first version that can be used to write music from start to finish: compose in a tracker, hear it,

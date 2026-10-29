@@ -4,10 +4,10 @@ import { Tracker } from "./components/Tracker";
 import { Piano, Scope } from "./components/Widgets";
 import { AudioEngine, type Positions } from "./audio";
 import { createMidiBackend, trackerNote, type MidiNote } from "./midi";
-import { openProject, pickMidi, pickSwm, saveFile } from "./files";
+import { confirmDiscard, openProject, pickMidi, pickSwm, saveFile } from "./files";
 import { MidiDialog } from "./components/MidiDialog";
 import { NOTE_OFF, hex, noteFromKey, type Song } from "./model";
-import { useStore } from "./store";
+import { selRect, useStore } from "./store";
 import { exportPrg, exportSid, importMidi, importSwm, midiParts, newSong, projectFits, validate, type MidiPart } from "./wasm";
 
 const isTyping = (t: EventTarget | null) =>
@@ -32,6 +32,12 @@ export function App({ initial }: { initial: Song }) {
   }, [audio]);
 
   useEffect(() => { document.documentElement.dataset.theme = theme === "auto" ? "" : theme; }, [theme]);
+  useEffect(() => {
+    if (!st.dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [st.dirty]);
   useEffect(() => { document.title = `${st.dirty ? "• " : ""}${st.song.title || "Untitled"} — SIDbloom`; }, [st.dirty, st.song.title]);
 
   // follow the playhead through the order list
@@ -129,7 +135,12 @@ export function App({ initial }: { initial: Song }) {
   }, []);
   const open = useCallback(async () => {
     const r = await openProject();
-    if (r) { stop(); dispatch({ t: "load", song: r.song, fileName: r.name }); }
+    if (r && (!stateRef.current.dirty || await confirmDiscard("Opening this file"))) { stop(); dispatch({ t: "load", song: r.song, fileName: r.name }); }
+  }, [dispatch, stop]);
+  const startNew = useCallback(async () => {
+    if (stateRef.current.dirty && !(await confirmDiscard("Starting a new song"))) return;
+    stop();
+    dispatch({ t: "load", song: newSong() });
   }, [dispatch, stop]);
 
   const [notes, setNotes] = useState<string[]>([]);
@@ -138,6 +149,7 @@ export function App({ initial }: { initial: Song }) {
     if (!f) return;
     try {
       const r = importSwm(f.bytes);
+      if (stateRef.current.dirty && !(await confirmDiscard("Importing this module"))) return;
       stop();
       dispatch({ t: "load", song: r.song, fileName: f.name.replace(/\.(swm|prg|p00)$/i, "") + ".sidb" });
       setNotes(r.warnings);
@@ -158,12 +170,13 @@ export function App({ initial }: { initial: Song }) {
       setMessage(`Cannot import ${f.name}: ${e instanceof Error ? e.message : e}`);
     }
   }, []);
-  const finishMidiImport = useCallback((voices: (number | null)[]) => {
+  const finishMidiImport = useCallback(async (voices: (number | null)[]) => {
     const m = midiImport;
     setMidiImport(null);
     if (!m) return;
     try {
       const r = importMidi(m.bytes, voices);
+      if (stateRef.current.dirty && !(await confirmDiscard("Importing this MIDI file"))) return;
       stop();
       dispatch({ t: "load", song: r.song, fileName: m.name.replace(/\.(mid|midi|rmi)$/i, "") + ".sidb" });
       setNotes(r.warnings);
@@ -197,6 +210,8 @@ export function App({ initial }: { initial: Song }) {
         if (lower === "y") return act({ t: "redo" });
         if (lower === "s") { e.preventDefault(); void save(); return; }
         if (lower === "o") { e.preventDefault(); void open(); return; }
+        if (lower === "c" || lower === "x") return act({ t: "copy", cut: lower === "x" });
+        if (lower === "v") return act({ t: "paste" });
         if (key === "ArrowLeft") return act({ t: "orderPos", pos: s.orderPos - 1 });
         if (key === "ArrowRight") return act({ t: "orderPos", pos: s.orderPos + 1 });
         return;
@@ -205,11 +220,11 @@ export function App({ initial }: { initial: Song }) {
       switch (key) {
         case " ": e.preventDefault(); return void (playing ? stop() : play(false));
         case "Enter": e.preventDefault(); return void play(true);
-        case "Escape": return stop();
-        case "ArrowUp": return act({ t: "move", drow: -1 });
-        case "ArrowDown": return act({ t: "move", drow: 1 });
-        case "ArrowLeft": return act({ t: "move", dfield: -1 });
-        case "ArrowRight": return act({ t: "move", dfield: 1 });
+        case "Escape": dispatch({ t: "deselect" }); return stop();
+        case "ArrowUp": return act({ t: "move", drow: -1, extend: e.shiftKey });
+        case "ArrowDown": return act({ t: "move", drow: 1, extend: e.shiftKey });
+        case "ArrowLeft": return act({ t: "move", dfield: -1, extend: e.shiftKey });
+        case "ArrowRight": return act({ t: "move", dfield: 1, extend: e.shiftKey });
         case "Tab": return act({ t: "move", dch: e.shiftKey ? -1 : 1 });
         case "PageUp": return act({ t: "move", drow: -16 });
         case "PageDown": return act({ t: "move", drow: 16 });
@@ -254,7 +269,7 @@ export function App({ initial }: { initial: Song }) {
       <header className="topbar">
         <div className="brand"><img className="logo" src="/favicon.svg" alt="" width={26} height={26} /> SIDbloom</div>
         <div className="group">
-          <button onClick={() => { stop(); dispatch({ t: "load", song: newSong() }); }}>New</button>
+          <button onClick={() => void startNew()} title="Start a new song (asks first if there are unsaved changes)">New</button>
           <button onClick={() => void open()} title="Open a .sidb project, or a .sid / .prg exported by SIDbloom (Ctrl+O)">Open</button>
           <button onClick={() => void save()}>Save</button>
           <button onClick={() => void importSidWizard()} title="Import a SID-Wizard 1.x module (.swm)" data-testid="import-swm">Import SW…</button>
@@ -316,12 +331,17 @@ export function App({ initial }: { initial: Song }) {
 
       <main className="main">
         <div className="left">
-          <Tracker song={song} orderPos={st.orderPos} cursor={st.cursor} playRows={playRows} onCursor={(c) => dispatch({ t: "cursor", c })} />
+          <Tracker song={song} orderPos={st.orderPos} cursor={st.cursor} sel={st.sel ? selRect(st) : null} playRows={playRows} onCursor={(c, extend) => dispatch({ t: "cursor", c, extend })} />
           <div className="statusbar">
             <span>Pos <b>{hex(st.orderPos)}</b></span>
             <span>Row <b>{hex(st.cursor.row)}</b></span>
             <span>Octave <b>{st.octave}</b></span>
             <span>Instrument <b>{hex(st.curInst)}</b></span>
+            <span className="btn-row">
+              <button onClick={() => dispatch({ t: "copy" })} title="Copy the selected cells (Ctrl+C). Select with the mouse or Shift+arrows.">Copy</button>
+              <button onClick={() => dispatch({ t: "copy", cut: true })} title="Cut (Ctrl+X)">Cut</button>
+              <button onClick={() => dispatch({ t: "paste" })} disabled={!st.clip} title="Paste at the cursor (Ctrl+V)">Paste</button>
+            </span>
             <label className="inline">Step <input type="number" min={0} max={16} value={st.step} onChange={(e) => dispatch({ t: "step", n: Number(e.target.value) })} /></label>
             <Scope analyser={audio.analyser} />
           </div>

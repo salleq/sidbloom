@@ -66,6 +66,8 @@ input[type="number"] { width: 64px; }
 .rownum { color: var(--muted); text-align: center; font-size: 12px; user-select: none; }
 .tcell { display: flex; align-items: center; gap: 0; padding: 0 12px; border-left: 1px solid var(--line); white-space: pre; }
 .tcell.off { background: repeating-linear-gradient(45deg, transparent 0 6px, var(--line) 6px 7px); opacity: .5; }
+.tcell.selected { background: var(--sel, rgba(110, 90, 230, .22)); }
+.tracker-body { user-select: none; }
 .tcell.playing { background: var(--play); }
 .f { cursor: default; padding: 0 1px; border-radius: 3px; }
 .f.note { color: var(--note); margin-right: 10px; }

@@ -201,6 +201,7 @@ export function HelpPanel() {
         <dt>Del / Backspace</dt><dd>Clear cell · Ins inserts a row</dd>
         <dt>[ ]  − =</dt><dd>Octave · instrument</dd>
         <dt>Space / Enter</dt><dd>Play song / play from cursor</dd>
+        <dt>Drag, Shift+arrows</dt><dd>Select cells · Ctrl+C / X / V copy, cut, paste</dd>
         <dt>Ctrl+Z / Y / S / O</dt><dd>Undo · redo · save · open</dd>
       </dl>
       <h3>Effects</h3>
