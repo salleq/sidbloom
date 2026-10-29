@@ -8,7 +8,7 @@ and export real `.sid` files that play on a C64 or in any SID player.
 2. Click **New** for an empty song.
 3. Click a cell in **Voice 1**. Press **Z S X D C V G B H N J M** (a piano on the bottom keyboard row; **Q W E R T Y U**
    continue one octave higher). Each key writes a note and moves down one row; you hear it as you type.
-4. Press **Space** to play from the top, **Enter** to play from the cursor.
+4. Press **Space** to loop the current pattern, **Shift+Space** to play the whole song from the top, **Enter** to play the song from the cursor.
 5. **Export .sid** writes the file. That's it.
 
 ## 2. The screen
@@ -30,12 +30,12 @@ and export real `.sid` files that play on a C64 or in any SID player.
 | `0–9 A–F` | Type hex in the instrument / effect columns |
 | Del / Backspace | Clear the cell |
 | Insert / Shift+Backspace | Insert / delete a row (the rest of the pattern shifts) |
-| `[` `]` | Octave down / up |
+| `<` `>` · F1 F2 · `[` `]` | Octave down / up (also the − + buttons) |
 | `-` `=` | Previous / next instrument |
 | Drag with the mouse, or Shift+arrows | Select cells (several rows and voices) |
 | Ctrl+C / Ctrl+X / Ctrl+V | Copy, cut, paste the selection at the cursor (a single cell when nothing is selected); Del clears the selection |
 | Ctrl+Z / Ctrl+Y | Undo / redo (200 steps) |
-| Ctrl+S / Ctrl+O | Save / open a `.sidb` project |
+| Ctrl+S / Ctrl+Shift+S / Ctrl+O | Save (overwrites the current file) / save as / open a `.sidb` project |
 
 New, Open and the imports ask before they replace a song with unsaved changes. A new song gives each voice its own pattern;
 when several voices show the same pattern number in the order list they share it, and editing one changes the others.

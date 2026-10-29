@@ -4,9 +4,9 @@ import { Tracker } from "./components/Tracker";
 import { Piano, Scope } from "./components/Widgets";
 import { AudioEngine, type Positions } from "./audio";
 import { createMidiBackend, trackerNote, type MidiNote } from "./midi";
-import { confirmDiscard, openProject, pickMidi, pickSwm, saveFile } from "./files";
+import { confirmDiscard, openProject, pickMidi, pickSwm, saveFile, saveProject, type SaveTarget } from "./files";
 import { MidiDialog } from "./components/MidiDialog";
-import { NOTE_OFF, hex, noteFromKey, type Song } from "./model";
+import { NOTE_OFF, hex, noteFromKey, patternLoop, type Song } from "./model";
 import { selRect, useStore } from "./store";
 import { exportPrg, exportSid, importMidi, importSwm, midiParts, newSong, projectFits, validate, type MidiPart } from "./wasm";
 
@@ -14,6 +14,9 @@ const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA") && (t as HTMLInputElement).type !== "checkbox" && (t as HTMLInputElement).type !== "range";
 
 const slug = (s: string) => s.trim().replace(/[^a-z0-9-_]+/gi, "_").replace(/^_+|_+$/g, "") || "song";
+
+const TABS = [["song", "Song"], ["inst", "Instrument"], ["chords", "Chords"], ["filter", "Filter"], ["help", "Help"]] as const;
+type TabId = (typeof TABS)[number][0];
 
 export function App({ initial }: { initial: Song }) {
   const [st, dispatch] = useStore(initial);
@@ -26,7 +29,6 @@ export function App({ initial }: { initial: Song }) {
   const playingRef = useRef(false);
 
   useEffect(() => {
-    audio.onPositions = setPlayPos;
     audio.onError = (m) => setMessage(`Audio error: ${m}`);
     (window as unknown as { __sidbloom: unknown }).__sidbloom = audio; // handy for end-to-end tests
   }, [audio]);
@@ -40,20 +42,49 @@ export function App({ initial }: { initial: Song }) {
   }, [st.dirty]);
   useEffect(() => { document.title = `${st.dirty ? "• " : ""}${st.song.title || "Untitled"} — SIDbloom`; }, [st.dirty, st.song.title]);
 
-  // follow the playhead through the order list
-  useEffect(() => {
-    if (playPos && playPos[0][0] !== st.orderPos) dispatch({ t: "orderPos", pos: playPos[0][0] });
-  }, [playPos, st.orderPos, dispatch]);
+  const [tab, setTab] = useState<TabId>(() => {
+    try { const t = localStorage.getItem("sidbloom.tab"); if (TABS.some(([id]) => id === t)) return t as TabId; } catch { /* private mode */ }
+    return "song";
+  });
+  const chooseTab = (t: TabId) => {
+    setTab(t);
+    try { localStorage.setItem("sidbloom.tab", t); } catch { /* private mode */ }
+  };
 
   const playing = playPos !== null;
   playingRef.current = playing;
-  const play = useCallback(async (fromCursor: boolean) => {
+  type PlayMode = "pattern" | "song" | "cursor";
+  const modeRef = useRef<PlayMode>("song");
+  const loopPos = useRef(0);
+  // what the engine plays: the whole song, or just the order position that is looped
+  const playable = useCallback((song: Song) => (modeRef.current === "pattern" ? patternLoop(song, loopPos.current) : song), []);
+
+  const play = useCallback(async (mode: PlayMode, pos?: number) => {
     const s = stateRef.current;
+    const p = pos ?? s.orderPos;
+    modeRef.current = mode;
+    loopPos.current = p;
     setMessage("");
-    setPlayPos([[fromCursor ? s.orderPos : 0, fromCursor ? s.cursor.row : 0], [0, 0], [0, 0]]);
-    await audio.play(s.song, s.sid8580, fromCursor ? s.orderPos : 0, fromCursor ? s.cursor.row : 0);
-  }, [audio]);
+    const [order, row] = mode === "cursor" ? [p, s.cursor.row] : [0, 0];
+    setPlayPos([[mode === "pattern" ? p : order, row], [0, 0], [0, 0]]);
+    await audio.play(playable(s.song), s.sid8580, mode === "pattern" ? 0 : order, row);
+  }, [audio, playable]);
   const stop = useCallback(() => { audio.stop(); setPlayPos(null); }, [audio]);
+
+  // a looped pattern reports order position 0; show it at the position that is looped
+  useEffect(() => {
+    audio.onPositions = (p) => setPlayPos(modeRef.current === "pattern" ? p.map(([, r]) => [loopPos.current, r] as [number, number]) : p);
+  }, [audio]);
+
+  // follow the playhead through the order list; a looped pattern follows the selected position instead
+  useEffect(() => {
+    if (!playPos) return;
+    if (modeRef.current !== "pattern") {
+      if (playPos[0][0] !== st.orderPos) dispatch({ t: "orderPos", pos: playPos[0][0] });
+    } else if (st.orderPos !== loopPos.current) {
+      void play("pattern", st.orderPos);
+    }
+  }, [playPos, st.orderPos, dispatch, play]);
 
   // ---- MIDI keyboard
   const midi = useMemo(() => createMidiBackend(), []);
@@ -119,27 +150,37 @@ export function App({ initial }: { initial: Song }) {
   // editing while playing: hand the changed song to the running player (debounced)
   useEffect(() => {
     if (!playing) return;
-    const t = window.setTimeout(() => audio.update(st.song), 120);
+    const t = window.setTimeout(() => audio.update(playable(st.song)), 120);
     return () => window.clearTimeout(t);
-  }, [st.song, playing, audio]);
+  }, [st.song, playing, audio, playable]);
 
   const hearNote = useCallback((note: number) => {
     const s = stateRef.current;
     if (!playing) void audio.preview(s.song, s.curInst, note, s.sid8580);
   }, [audio, playing]);
 
-  const save = useCallback(async () => {
+  const target = useRef<SaveTarget | null>(null);
+  const save = useCallback(async (saveAs = false) => {
     const s = stateRef.current;
     const name = s.fileName.endsWith(".sidb") ? s.fileName : `${slug(s.song.title)}.sidb`;
-    if (await saveFile(name, JSON.stringify(s.song, null, 2), "sidb")) setMessage(`Saved ${name}`);
-  }, []);
+    try {
+      const r = await saveProject(name, JSON.stringify(s.song, null, 2), target.current, saveAs);
+      if (!r) return;
+      target.current = r.target;
+      dispatch({ t: "saved", fileName: r.name });
+      setMessage(`Saved ${r.name}`);
+    } catch (e) {
+      setMessage(`Cannot save: ${e instanceof Error ? e.message : e}`);
+    }
+  }, [dispatch]);
   const open = useCallback(async () => {
     const r = await openProject();
-    if (r && (!stateRef.current.dirty || await confirmDiscard("Opening this file"))) { stop(); dispatch({ t: "load", song: r.song, fileName: r.name }); }
+    if (r && (!stateRef.current.dirty || await confirmDiscard("Opening this file"))) { stop(); target.current = r.target; dispatch({ t: "load", song: r.song, fileName: r.name }); }
   }, [dispatch, stop]);
   const startNew = useCallback(async () => {
     if (stateRef.current.dirty && !(await confirmDiscard("Starting a new song"))) return;
     stop();
+    target.current = null;
     dispatch({ t: "load", song: newSong() });
   }, [dispatch, stop]);
 
@@ -151,6 +192,7 @@ export function App({ initial }: { initial: Song }) {
       const r = importSwm(f.bytes);
       if (stateRef.current.dirty && !(await confirmDiscard("Importing this module"))) return;
       stop();
+      target.current = null;
       dispatch({ t: "load", song: r.song, fileName: f.name.replace(/\.(swm|prg|p00)$/i, "") + ".sidb" });
       setNotes(r.warnings);
       setMessage(`Imported ${f.name}${r.warnings.length ? ` — ${r.warnings.length} things were approximated` : ""}`);
@@ -178,6 +220,7 @@ export function App({ initial }: { initial: Song }) {
       const r = importMidi(m.bytes, voices);
       if (stateRef.current.dirty && !(await confirmDiscard("Importing this MIDI file"))) return;
       stop();
+      target.current = null;
       dispatch({ t: "load", song: r.song, fileName: m.name.replace(/\.(mid|midi|rmi)$/i, "") + ".sidb" });
       setNotes(r.warnings);
       setMessage(`Imported ${m.name}${r.warnings.length ? ` — ${r.warnings.length} notes about the conversion` : ""}`);
@@ -208,7 +251,7 @@ export function App({ initial }: { initial: Song }) {
       if (mod) {
         if (lower === "z") return act({ t: e.shiftKey ? "redo" : "undo" });
         if (lower === "y") return act({ t: "redo" });
-        if (lower === "s") { e.preventDefault(); void save(); return; }
+        if (lower === "s") { e.preventDefault(); void save(e.shiftKey); return; }
         if (lower === "o") { e.preventDefault(); void open(); return; }
         if (lower === "c" || lower === "x") return act({ t: "copy", cut: lower === "x" });
         if (lower === "v") return act({ t: "paste" });
@@ -220,8 +263,8 @@ export function App({ initial }: { initial: Song }) {
       }
       if (e.altKey) return;
       switch (key) {
-        case " ": e.preventDefault(); return void (playing ? stop() : play(false));
-        case "Enter": e.preventDefault(); return void play(true);
+        case " ": e.preventDefault(); return void (playing ? stop() : play(e.shiftKey ? "song" : "pattern"));
+        case "Enter": e.preventDefault(); return void play("cursor");
         case "Escape": dispatch({ t: "deselect" }); return stop();
         case "ArrowUp": return act({ t: "move", drow: -1, extend: e.shiftKey });
         case "ArrowDown": return act({ t: "move", drow: 1, extend: e.shiftKey });
@@ -235,8 +278,10 @@ export function App({ initial }: { initial: Song }) {
         case "Delete": return act({ t: "clearCell" });
         case "Backspace": return act({ t: e.shiftKey ? "insertRow" : "clearCell", ...(e.shiftKey ? { remove: true } : { backspace: true }) } as never);
         case "Insert": return act({ t: "insertRow" });
-        case "[": return act({ t: "octave", d: -1 });
-        case "]": return act({ t: "octave", d: 1 });
+        case "[": case "<": case "F1": return act({ t: "octave", d: -1 });
+        case "]": case ">": case "F2": return act({ t: "octave", d: 1 });
+        case "F3": return act({ t: "curInst", i: s.curInst - 1 });
+        case "F4": return act({ t: "curInst", i: s.curInst + 1 });
         case "-": return act({ t: "curInst", i: s.curInst - 1 });
         case "=": if (s.cursor.field !== 0) return act({ t: "curInst", i: s.curInst + 1 }); break;
       }
@@ -273,7 +318,8 @@ export function App({ initial }: { initial: Song }) {
         <div className="group">
           <button onClick={() => void startNew()} title="Start a new song (asks first if there are unsaved changes)">New</button>
           <button onClick={() => void open()} title="Open a .sidb project, or a .sid / .prg exported by SIDbloom (Ctrl+O)">Open</button>
-          <button onClick={() => void save()}>Save</button>
+          <button onClick={() => void save()} title="Save the project (Ctrl+S); overwrites the file it was opened from or last saved to">Save</button>
+          <button onClick={() => void save(true)} title="Save under a new name (Ctrl+Shift+S)" data-testid="save-as">Save As…</button>
           <button onClick={() => void importSidWizard()} title="Import a SID-Wizard 1.x module (.swm)" data-testid="import-swm">Import SW…</button>
           <button onClick={() => void startMidiImport()} title="Import a MIDI file (.mid)" data-testid="import-mid">Import MIDI…</button>
         </div>
@@ -282,10 +328,11 @@ export function App({ initial }: { initial: Song }) {
           <button onClick={() => dispatch({ t: "redo" })} disabled={!st.future.length} title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
         </div>
         <div className="group transport">
-          <button className="primary" onClick={() => (playing ? stop() : void play(false))} data-testid="play" aria-label={playing ? "Stop" : "Play"} title="Play / stop (Space)">
-            {playing ? "■ Stop" : "▶ Play"}
+          <button className="primary" onClick={() => (playing ? stop() : void play("pattern"))} data-testid="play" aria-label={playing ? "Stop" : "Play"} title="Loop the current pattern / stop (Space)">
+            {playing ? "■ Stop" : "▶ Pattern"}
           </button>
-          <button onClick={() => void play(true)} title="Play from cursor (Enter)">▶ From cursor</button>
+          <button onClick={() => void play("song")} title="Play the whole song from the start (Shift+Space)" data-testid="play-song">▶ Song</button>
+          <button onClick={() => void play("cursor")} title="Play the song from the cursor (Enter)">▶ From cursor</button>
         </div>
         <div className="group">
           <label className="inline">Speed
@@ -337,7 +384,11 @@ export function App({ initial }: { initial: Song }) {
           <div className="statusbar">
             <span>Pos <b>{hex(st.orderPos)}</b></span>
             <span>Row <b>{hex(st.cursor.row)}</b></span>
-            <span>Octave <b>{st.octave}</b></span>
+            <span className="btn-row">Octave
+              <button className="mini" onClick={() => dispatch({ t: "octave", d: -1 })} aria-label="Octave down" title="Octave down (&lt; or F1)">−</button>
+              <b data-testid="octave">{st.octave}</b>
+              <button className="mini" onClick={() => dispatch({ t: "octave", d: 1 })} aria-label="Octave up" title="Octave up (&gt; or F2)">+</button>
+            </span>
             <span>Instrument <b>{hex(st.curInst)}</b></span>
             <span className="btn-row">
               <button onClick={() => dispatch({ t: "copy" })} title="Copy the selected cells (Ctrl+C). Select with the mouse or Shift+arrows.">Copy</button>
@@ -350,11 +401,18 @@ export function App({ initial }: { initial: Song }) {
           <Piano octave={st.octave} onNote={(note) => { hearNote(note); if (st.cursor.field === 0) dispatch({ t: "enterNote", note }); }} />
         </div>
         <aside className="right-col">
-          <OrderPanel song={song} orderPos={st.orderPos} ch={st.cursor.ch} dispatch={dispatch} playOrder={playPos ? playPos[0][0] : null} />
-          <InstrumentPanel song={song} inst={st.curInst} dispatch={dispatch} onPreview={(note) => hearNote(note ?? 58)} />
-          <ChordPanel song={song} dispatch={dispatch} />
-          <FilterPanel song={song} dispatch={dispatch} />
-          <HelpPanel />
+          <nav className="tabs" role="tablist" aria-label="Panels">
+            {TABS.map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={tab === id} className={`tab${tab === id ? " on" : ""}`} onClick={() => chooseTab(id)} data-testid={`tab-${id}`}>{label}</button>
+            ))}
+          </nav>
+          <div className="tab-body">
+            {tab === "song" && <OrderPanel song={song} orderPos={st.orderPos} ch={st.cursor.ch} dispatch={dispatch} playOrder={playPos ? playPos[0][0] : null} onPlay={(p) => { dispatch({ t: "orderPos", pos: p }); void play("pattern", p); }} />}
+            {tab === "inst" && <InstrumentPanel song={song} inst={st.curInst} dispatch={dispatch} onPreview={(note) => hearNote(note ?? 58)} />}
+            {tab === "chords" && <ChordPanel song={song} dispatch={dispatch} />}
+            {tab === "filter" && <FilterPanel song={song} dispatch={dispatch} />}
+            {tab === "help" && <HelpPanel />}
+          </div>
         </aside>
       </main>
     </div>

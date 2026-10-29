@@ -9,7 +9,7 @@ import { EnvelopeEditor, FilterPad, Knob } from "./Controls";
 type D = (a: Action) => void;
 
 /* ---------- order list ---------- */
-export function OrderPanel({ song, orderPos, ch, dispatch, playOrder }: { song: Song; orderPos: number; ch: number; dispatch: D; playOrder: number | null }) {
+export function OrderPanel({ song, orderPos, ch, dispatch, playOrder, onPlay }: { song: Song; orderPos: number; ch: number; dispatch: D; playOrder: number | null; onPlay: (pos: number) => void }) {
   const n = orderLength(song);
   const len = patternAt(song, ch, orderPos)?.rows.length ?? 0;
   return (
@@ -19,7 +19,8 @@ export function OrderPanel({ song, orderPos, ch, dispatch, playOrder }: { song: 
         {Array.from({ length: n }, (_, p) => (
           <button key={p} role="option" aria-selected={p === orderPos}
             className={`order-row${p === orderPos ? " sel" : ""}${p === playOrder ? " playing" : ""}`}
-            onClick={() => dispatch({ t: "orderPos", pos: p })}>
+            title="Click to select, double-click to play this pattern"
+            onClick={() => dispatch({ t: "orderPos", pos: p })} onDoubleClick={() => onPlay(p)}>
             <b>{hex(p)}</b>
             {song.linked
               ? <span className="wide">{song.orders[0][p] === undefined ? "--" : hex(Math.floor(song.orders[0][p] / 3))}</span>
@@ -111,20 +112,23 @@ export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Son
         <Knob label="Sustain" value={S} max={15} def={15} onChange={(v) => upd((x) => { x.sustain_release = (v << 4) | (x.sustain_release & 15); }, "s")} />
         <Knob label="Release" value={R} max={15} onChange={(v) => upd((x) => { x.sustain_release = (x.sustain_release & 0xf0) | v; }, "r")} />
       </div>
-      <h3>Pulse <small>sweep moves the width every frame</small></h3>
+      <details className="fold" open>
+      <summary>Pulse <small>sweep moves the width every frame</small></summary>
       <div className="knobs">
         <Knob label="Width" value={ins.pulse_width} max={4095} def={2048} onChange={(v) => upd((x) => { x.pulse_width = v; }, "pw")} />
         <Knob label="Sweep" value={ins.pulse_speed} min={-64} max={64} format={(v) => String(v)} onChange={(v) => upd((x) => { x.pulse_speed = v; }, "ps")} />
         <Knob label="Sweep min" value={ins.pulse_min} max={4095} onChange={(v) => upd((x) => { x.pulse_min = Math.min(v, x.pulse_max); }, "pmin")} />
         <Knob label="Sweep max" value={ins.pulse_max} max={4095} def={4095} onChange={(v) => upd((x) => { x.pulse_max = Math.max(v, x.pulse_min); }, "pmax")} />
       </div>
+      </details>
       <label className="field">Chord
         <select aria-label="Default chord" value={ins.default_chord} onChange={(e) => upd((x) => { x.default_chord = Number(e.target.value); })}>
           <option value={0}>none</option>
           {song.chords.map((_, k) => <option key={k} value={k + 1}>{hex(k + 1)} — {chordText(song.chords[k].notes)}</option>)}
         </select>
       </label>
-      <h3>Waveform table <small>one step per frame</small></h3>
+      <details className="fold">
+      <summary>Waveform table <small>one step per frame</small></summary>
       <div className="wave-table">
         {ins.wave_table.map((st, k) => (
           <div key={k} className={`wave-step${ins.wave_loop === k ? " loop" : ""}`}>
@@ -145,6 +149,7 @@ export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Son
       </div>
       <button disabled={ins.wave_table.length >= LIMITS.waveSteps}
         onClick={() => upd((x) => { x.wave_table.push({ ...x.wave_table[x.wave_table.length - 1] }); })}>＋ Step</button>
+      </details>
     </section>
   );
 }
@@ -210,11 +215,14 @@ export function HelpPanel() {
         <dt>0–9, A–F</dt><dd>Enter hex in instrument / effect columns</dd>
         <dt>Arrows, Tab</dt><dd>Move · PgUp/PgDn jump 16 rows</dd>
         <dt>Del / Backspace</dt><dd>Clear cell · Ins inserts a row</dd>
-        <dt>[ ]  − =</dt><dd>Octave · instrument</dd>
-        <dt>Space / Enter</dt><dd>Play song / play from cursor</dd>
+        <dt>&lt; &gt; · F1 F2 · [ ]</dt><dd>Octave down / up</dd>
+        <dt>− = · F3 F4</dt><dd>Previous / next instrument</dd>
+        <dt>Space</dt><dd>Loop the current pattern · Shift+Space plays the whole song</dd>
+        <dt>Enter</dt><dd>Play the song from the cursor</dd>
         <dt>Ctrl+A · Ctrl+[ ]</dt><dd>Select the whole pattern · transpose selection ±1 (Shift: ±12)</dd>
         <dt>Drag, Shift+arrows</dt><dd>Select cells · Ctrl+C / X / V copy, cut, paste</dd>
-        <dt>Ctrl+Z / Y / S / O</dt><dd>Undo · redo · save · open</dd>
+        <dt>Ctrl+Z / Y / O</dt><dd>Undo · redo · open</dd>
+        <dt>Ctrl+S · Ctrl+Shift+S</dt><dd>Save · save as</dd>
       </dl>
       <h3>Effects</h3>
       <dl>{Object.entries(FX_HELP).map(([k, v]) => (<span key={k} className="fxline"><dt>{Number(k).toString(16).toUpperCase()}xy</dt><dd>{v}</dd></span>))}</dl>

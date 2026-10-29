@@ -92,6 +92,23 @@ export const rowsAt = (s: Song, pos: number) => Math.max(1, ...[0, 1, 2].map((ch
 
 export const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
+/**
+ * A copy of the song whose order list is just position `pos`, so the engine loops that one pattern.
+ * A voice without a pattern there gets an empty one, so it stays silent.
+ */
+export function patternLoop(s: Song, pos: number): Song {
+  const rows = rowsAt(s, pos);
+  const patterns = [...s.patterns];
+  let blank = -1;
+  const orders = [0, 1, 2].map((ch) => {
+    const idx = s.orders[ch][pos];
+    if (idx !== undefined) return [idx];
+    if (blank < 0) { blank = patterns.length; patterns.push(emptyPattern(rows)); }
+    return [blank];
+  }) as Song["orders"];
+  return { ...s, patterns, orders };
+}
+
 /** Tracker piano: key -> semitone offset from the current octave's C. */
 export const PIANO_KEYS: Record<string, number> = {
   z: 0, s: 1, x: 2, d: 3, c: 4, v: 5, g: 6, b: 7, h: 8, n: 9, j: 10, m: 11, ",": 12, l: 13, ".": 14, ";": 15, "/": 16,
