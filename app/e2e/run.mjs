@@ -2,7 +2,7 @@
 import { chromium } from "playwright";
 import { preview } from "vite";
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 
 const shots = process.env.SHOTS_DIR ?? "e2e/shots";
 mkdirSync(shots, { recursive: true });
@@ -91,6 +91,35 @@ try {
   await page.reload();
   await page.waitForSelector("[data-testid=tracker]");
 
+  // linked patterns (the demo is linked): one pattern number covers all voices
+  const panelBtn = (n) => page.locator(".panel").getByRole("button", { name: n, exact: true });
+  assert.equal((await page.locator(".order-row").first().innerText()).replace(/\s+/g, " ").trim(), "00 00", "one pattern number per position");
+  await panelBtn("New").click();
+  assert.deepEqual(await page.locator(".pat-id").allInnerTexts(), ["pattern 01", "pattern 01", "pattern 01"]);
+  assert.equal(await page.locator(".tcell .f.note:not(.empty)").count(), 0, "new combined pattern is empty in all voices");
+  await panelBtn("Duplicate").click();
+  await page.getByLabel("Previous pattern").click();
+  await page.getByLabel("Previous pattern").click();
+  assert.deepEqual(await page.locator(".pat-id").allInnerTexts(), ["pattern 00", "pattern 00", "pattern 00"]);
+  assert.match(await page.locator(".trow").first().innerText(), /A-4/);
+  await page.getByLabel("Rows").fill("16");
+  assert.equal(await page.locator(".trow").count(), 16, "rows changes all voices");
+  await page.keyboard.press("Control+z");
+  await page.getByText("Linked patterns").click();
+  assert.equal((await page.locator(".order-row").first().innerText()).replace(/\s+/g, " ").trim(), "00 00 01 02");
+  await page.getByText("Linked patterns").click();
+  assert.equal((await page.locator(".order-row").first().innerText()).replace(/\s+/g, " ").trim(), "00 00");
+  // select the whole pattern and transpose it up an octave
+  const rowBefore = await page.locator(".trow").first().innerText();
+  await page.locator(".tracker").click({ position: { x: 5, y: 5 } });
+  await page.locator(".trow").first().locator(".f.note").first().click();
+  await page.keyboard.press("Control+a");
+  assert.equal(await page.locator(".tcell.selected").count(), 3 * 32);
+  await page.keyboard.press("Control+Shift+}");
+  assert.match(await page.locator(".trow").first().innerText(), /A-5/, `${rowBefore} transposed`);
+  await page.keyboard.press("Control+z");
+  step("linked patterns: new / duplicate / rows act on all voices, toggle is lossless, select all + transpose");
+
   // playback runs in an AudioWorklet and reports positions; output must be audible
   await page.getByTestId("play").click();
   await page.waitForFunction(() => window.__sidbloom.messages > 3, null, { timeout: 15000 });
@@ -124,7 +153,6 @@ try {
   // export .sid
   const [dl] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-sid").click()]);
   const path = await dl.path();
-  const { readFileSync } = await import("node:fs");
   const bytes = readFileSync(path);
   assert.equal(bytes.subarray(0, 4).toString("latin1"), "PSID");
   assert.ok(dl.suggestedFilename().endsWith(".sid"));
@@ -167,6 +195,17 @@ try {
   assert.match(await page.locator(".trow").first().innerText(), /C-4/);
   assert.match(await page.getByTestId("status").innerText(), /Imported test\.swm\.prg/);
   step("SID-Wizard module imported");
+  assert.equal(await page.getByLabel("Linked patterns").isChecked(), false, "imports keep their own pattern layout");
+  await page.getByText("Linked patterns").click();
+  assert.match(await page.locator(".trow").first().innerText(), /C-4/);
+  assert.match(await page.locator(".trow").first().locator(".tcell").nth(1).innerText(), /C-4/, "shared pattern copied to every voice");
+  await page.locator(".trow").first().locator(".f.note").first().click();
+  await page.keyboard.press("z");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("1");
+  assert.match(await page.locator(".trow").first().locator(".tcell").nth(1).innerText(), /C-4/, "voices are independent after linking");
+  await page.keyboard.press("Control+z"); await page.keyboard.press("Control+z");
+  step("imported song switched to linked patterns");
 
   // instrument editing changes the song and is undoable
   await page.getByLabel("Name").fill("My lead");
@@ -188,6 +227,32 @@ try {
   await page.getByRole("button", { name: /Test/ }).click();
   assert.ok((await energy()) > 1, "chord instrument silent");
   step("chord editor works and chord instrument plays");
+
+  // instrument library: every preset is audible; instruments export to and import from a .sidi file
+  const presets = await page.getByLabel("Instrument library").locator("option[value]:not([value=''])").evaluateAll((o) => o.map((x) => [x.value, x.textContent]));
+  assert.ok(presets.length >= 20, "at least 20 presets");
+  const nInst = async () => page.getByLabel("Instrument", { exact: true }).locator("option").count();
+  const start = await nInst();
+  for (const [v, name] of presets) {
+    await page.getByLabel("Instrument library").selectOption(v);
+    const e = await energy();
+    console.log(`  preset ${name}: energy ${e.toFixed(1)}`);
+    assert.ok(e > 0.3, `preset ${name} is silent`);
+  }
+  assert.equal(await nInst(), Math.min(64, start + presets.length));
+  const [sd] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-instrument").click()]);
+  const sidi = readFileSync(await sd.path());
+  assert.ok(sd.suggestedFilename().endsWith(".sidi"));
+  const countBefore = await nInst();
+  const [ic] = await Promise.all([page.waitForEvent("filechooser"), page.getByTestId("import-instrument").click()]);
+  await ic.setFiles({ name: "x.sidi", mimeType: "application/json", buffer: sidi });
+  await page.waitForFunction((n) => document.querySelectorAll("[aria-label=Instrument] option").length > n, countBefore);
+  dialogText = "";
+  const [ic2] = await Promise.all([page.waitForEvent("filechooser"), page.getByTestId("import-instrument").click()]);
+  await ic2.setFiles({ name: "bad.sidi", mimeType: "application/json", buffer: Buffer.from('{"format":"nope"}') });
+  await page.waitForTimeout(200);
+  assert.match(dialogText, /not a SIDbloom instrument/);
+  step(`${presets.length} library instruments play; .sidi export and import work`);
 
   // import a MIDI file: pick which part goes to which voice
   const vlq = (n) => { const o = [n & 0x7f]; n >>= 7; while (n) { o.unshift((n & 0x7f) | 0x80); n >>= 7; } return o; };

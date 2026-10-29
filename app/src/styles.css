@@ -94,6 +94,7 @@ input[type="number"] { width: 64px; }
 .order-row { display: grid; grid-template-columns: 30px repeat(3, 1fr); text-align: left; padding: 3px 8px; border-radius: 6px; background: transparent; border-color: transparent; }
 .order-row.sel { border-color: var(--accent); background: var(--panel2); }
 .order-row.playing { box-shadow: inset 3px 0 0 var(--play); }
+.order-row .wide { grid-column: 2 / 5; }
 .order-row b { color: var(--muted); font-weight: 400; }
 
 .slider { display: grid; grid-template-columns: 90px 1fr 36px; align-items: center; gap: 8px; color: var(--muted); }

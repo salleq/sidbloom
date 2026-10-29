@@ -49,10 +49,21 @@ Middle C (MIDI 60) is C-4. Notes outside C-0 … B-7 are ignored; velocity is ig
 keyboard only sounds. On macOS the first start may ask for permission to use MIDI devices.
 
 ## 4. Song order
-A song is a list of *positions*; each position names one pattern per voice. Patterns are reused, so one drum pattern
-can serve a whole song. Use **+ Position / − Position** to extend the song, ◀ ▶ to pick a different pattern for the
-current voice at the current position, **New** / **Duplicate** to make patterns, and **Rows** to change a pattern's
-length (1–64). Playback loops when every voice reaches the end of its list.
+A song is a list of *positions*. Use **+ Position / − Position** to extend the song, ◀ ▶ to pick a different pattern at the
+current position, **New** / **Duplicate** to make patterns, and **Rows** to change a pattern's length (1–64). Playback
+loops when every voice reaches the end of its list.
+
+**Linked patterns** (the checkbox in the order panel; on for new songs) work like a `.mod` tracker: one pattern number
+covers all three voices, so **New**, **Duplicate**, ◀ ▶ and **Rows** act on every voice at once. Together with
+**Ctrl+A** (select the whole pattern) and **Ctrl+[ / Ctrl+]** (transpose the selection by a semitone; add Shift for an
+octave) you can work on a whole bar at a time. The SID file you export is the same either way; the switch only changes
+how you edit.
+
+With linked patterns off, every voice has its own pattern number at each position, so patterns can be mixed freely (one
+drum pattern can serve a whole song, and voices may have patterns of different lengths). Switching linked patterns on
+copies each position's three patterns into one combined pattern. That is only offered when the voices have the same number of
+positions and equal pattern lengths at every position (otherwise the player's timing would change), and it can be undone.
+Songs imported from SID-Wizard or MIDI start unlinked.
 
 ## 5. Instruments
 - **ADSR** shapes the volume of each note; the graph shows it.
@@ -63,6 +74,10 @@ length (1–64). Playback loops when every voice reaches the end of its list.
   ↺ makes the table loop back to a step; without it the last step is held.
 - **Chord:** if set, the instrument steps through that chord's notes, one per frame (see below).
 - **♪ Test** plays the instrument.
+- **Add from library…** adds a ready-made instrument: drums (kick, snares, clap, hihats, tom, crash, ride), basses, leads, a
+  pad and arpeggio chords. Drums sound best at the pitch they were made for (kicks around C-2, snares around C-3, hihats high up),
+  so try other notes if one sounds off.
+- **Export / Import** save one instrument to a `.sidi` file and add one from a file, to share sounds between songs.
 
 ## 6. Effects
 Type the effect number in the third column and two hex digits in the parameter columns.

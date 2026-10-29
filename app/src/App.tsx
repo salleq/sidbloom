@@ -212,6 +212,8 @@ export function App({ initial }: { initial: Song }) {
         if (lower === "o") { e.preventDefault(); void open(); return; }
         if (lower === "c" || lower === "x") return act({ t: "copy", cut: lower === "x" });
         if (lower === "v") return act({ t: "paste" });
+        if (lower === "a") return act({ t: "selectAll" });
+        if (key === "[" || key === "]" || key === "{" || key === "}") return act({ t: "transpose", d: (key === "[" || key === "{" ? -1 : 1) * (key === "{" || key === "}" ? 12 : 1) });
         if (key === "ArrowLeft") return act({ t: "orderPos", pos: s.orderPos - 1 });
         if (key === "ArrowRight") return act({ t: "orderPos", pos: s.orderPos + 1 });
         return;
@@ -349,7 +351,7 @@ export function App({ initial }: { initial: Song }) {
         </div>
         <aside className="right-col">
           <OrderPanel song={song} orderPos={st.orderPos} ch={st.cursor.ch} dispatch={dispatch} playOrder={playPos ? playPos[0][0] : null} />
-          <InstrumentPanel song={song} inst={st.curInst} dispatch={dispatch} onPreview={() => hearNote(58)} />
+          <InstrumentPanel song={song} inst={st.curInst} dispatch={dispatch} onPreview={(note) => hearNote(note ?? 58)} />
           <ChordPanel song={song} dispatch={dispatch} />
           <FilterPanel song={song} dispatch={dispatch} />
           <HelpPanel />

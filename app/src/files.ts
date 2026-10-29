@@ -1,4 +1,4 @@
-import type { Song } from "./model";
+import type { Chord, Instrument, Song } from "./model";
 import { extractProject } from "./wasm";
 
 const inTauri = () => "__TAURI_INTERNALS__" in window;
@@ -89,4 +89,47 @@ export function pickSwm(): Promise<{ bytes: Uint8Array; name: string } | null> {
     input.oncancel = () => resolve(null);
     input.click();
   });
+}
+
+/** Instrument files (.sidi): one instrument, plus its chord if it plays one. */
+export const instrumentFile = (instrument: Instrument, chord?: Chord) =>
+  JSON.stringify({ format: "sidbloom-instrument", version: 1, instrument, chord }, null, 2);
+
+export function parseInstrumentFile(text: string): { instrument: Instrument; chord?: Chord } {
+  const j = JSON.parse(text);
+  const i = j?.instrument;
+  const okByte = (v: unknown) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 255;
+  if (j?.format !== "sidbloom-instrument" || !i || typeof i.name !== "string") throw new Error("not a SIDbloom instrument file");
+  if (!okByte(i.attack_decay) || !okByte(i.sustain_release) || !Array.isArray(i.wave_table) || i.wave_table.length < 1 || i.wave_table.length > 128
+    || !i.wave_table.every((w: { wave: unknown; semis: unknown }) => okByte(w?.wave) && Number.isInteger(w?.semis) && Math.abs(w.semis as number) <= 96)) {
+    throw new Error("the instrument data is damaged");
+  }
+  const c = j.chord;
+  const chord = c && Array.isArray(c.notes) && c.notes.length >= 1 && c.notes.length <= 16 && c.notes.every((n: unknown) => Number.isInteger(n) && Math.abs(n as number) <= 48)
+    ? { notes: c.notes as number[], hold: !!c.hold } : undefined;
+  const clamp = (v: unknown, lo: number, hi: number, d: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v as number))) : d);
+  return {
+    chord,
+    instrument: {
+      name: i.name.slice(0, 24),
+      attack_decay: i.attack_decay, sustain_release: i.sustain_release,
+      pulse_width: clamp(i.pulse_width, 0, 4095, 0x800),
+      wave_table: i.wave_table.map((w: { wave: number; semis: number }) => ({ wave: w.wave, semis: w.semis })),
+      wave_loop: Number.isInteger(i.wave_loop) && i.wave_loop >= 0 && i.wave_loop < i.wave_table.length ? i.wave_loop : null,
+      pulse_speed: clamp(i.pulse_speed, -64, 64, 0), pulse_min: clamp(i.pulse_min, 0, 4095, 0), pulse_max: clamp(i.pulse_max, 0, 4095, 4095),
+      default_chord: chord ? 1 : 0,
+    },
+  };
+}
+
+/** Picks an instrument file. */
+export async function pickInstrument(): Promise<{ instrument: Instrument; chord?: Chord } | null> {
+  const f = await pickBytes(".sidi,.json");
+  if (!f) return null;
+  try {
+    return parseInstrumentFile(new TextDecoder().decode(f.bytes));
+  } catch (e) {
+    alert(`Could not open ${f.name}: ${e instanceof Error ? e.message : e}`);
+    return null;
+  }
 }

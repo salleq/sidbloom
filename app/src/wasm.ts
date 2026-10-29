@@ -8,9 +8,10 @@ export const loadWasm = () => (ready ??= init({ module_or_path: wasmUrl }));
 export const demoSong = (): Song => JSON.parse(w.demo_song());
 export const newSong = (): Song => {
   const s: Song = JSON.parse(w.new_song());
-  // every voice gets its own pattern, so editing one voice does not change the others
+  // linked patterns: pattern 0..2 are the three voices of combined pattern 0
   while (s.patterns.length < 3) s.patterns.push(structuredClone(s.patterns[0]));
   s.orders = [[0], [1], [2]];
+  s.linked = true;
   return s;
 };
 export const validate = (s: Song) => w.validate(JSON.stringify(s));

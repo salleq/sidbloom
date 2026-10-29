@@ -58,6 +58,7 @@ pub fn demo_song() -> Song {
     s.patterns = vec![lead, bass, hat];
     s.orders = [vec![0, 0], vec![1, 1], vec![2, 2]];
     s.filter = FilterSettings { cutoff: 0, resonance: 0, routing: 0, mode: 0, volume: 15 };
+    s.linked = true; // patterns 0,1,2 are the voices of combined pattern 0
     s
 }
 
@@ -78,6 +79,16 @@ mod tests {
         save(&s, &p).unwrap();
         assert_eq!(load(&p).unwrap(), s);
         std::fs::remove_file(p).ok();
+    }
+
+    #[test]
+    fn linked_flag_roundtrips_and_defaults_to_off() {
+        let s = demo_song();
+        assert!(s.linked);
+        assert!(from_json(&to_json(&s)).unwrap().linked);
+        let mut v: serde_json::Value = serde_json::from_str(&to_json(&s)).unwrap();
+        v.as_object_mut().unwrap().remove("linked");
+        assert!(!from_json(&v.to_string()).unwrap().linked);
     }
 
     #[test]

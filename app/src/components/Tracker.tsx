@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from "react";
-import { cellText, hex, patternAt, rowsAt, type Song } from "../model";
+import { cellText, groupAt, hex, patternAt, rowsAt, type Song } from "../model";
 import type { Cursor, Rect } from "../store";
 
 interface Props {
@@ -29,7 +29,7 @@ export const Tracker = memo(function Tracker({ song, orderPos, cursor, sel, play
         {[0, 1, 2].map((ch) => (
           <div key={ch} className="chan-head">
             Voice {ch + 1}
-            <span className="pat-id">pattern {hex(song.orders[ch][orderPos] ?? 0)}</span>
+            <span className="pat-id">pattern {hex(song.linked ? groupAt(song, orderPos) : song.orders[ch][orderPos] ?? 0)}</span>
           </div>
         ))}
       </div>

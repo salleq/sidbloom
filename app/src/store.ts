@@ -1,7 +1,8 @@
 import { useReducer } from "react";
 import {
   CHANNELS, FX_NONE, LIMITS, NOTE_OFF, VALID_FX, clamp, emptyCell, emptyPattern, orderLength, patternAt, rowsAt,
-  type Cell, type Instrument, type Song,
+  groupAt, groupCount, linkProblem,
+  type Cell, type Chord, type Instrument, type Song,
 } from "./model";
 
 export interface Cursor { ch: number; row: number; field: number } // field 0 note,1-2 inst,3 fx,4-5 param
@@ -34,6 +35,8 @@ export type Action =
   | { t: "deselect" }
   | { t: "copy"; cut?: boolean }
   | { t: "paste" }
+  | { t: "selectAll" }
+  | { t: "transpose"; d: number }
   | { t: "orderPos"; pos: number }
   | { t: "octave"; d: number }
   | { t: "curInst"; i: number }
@@ -103,6 +106,22 @@ export function reducer(st: State, a: Action): State {
         Array.from({ length: r.row1 - r.row0 + 1 }, (_, j) => structuredClone(patternAt(st.song, r.ch0 + i, st.orderPos)?.rows[r.row0 + j] ?? emptyCell())));
       const next = { ...st, clip };
       return a.cut ? { ...reducer(next, { t: "clearCell", whole: true }), clip } : next;
+    }
+    case "selectAll": {
+      const rows = rowsAt(st.song, st.orderPos);
+      return { ...st, sel: { ch: 0, row: 0 }, cursor: { ...st.cursor, ch: CHANNELS - 1, row: rows - 1 } };
+    }
+    case "transpose": {
+      const r = selRect(st);
+      return commit(st, (s) => {
+        for (let c = r.ch0; c <= r.ch1; c++) {
+          const rows = patternAt(s, c, st.orderPos)?.rows;
+          for (let i = r.row0; rows && i <= r.row1 && i < rows.length; i++) {
+            const cell = rows[i];
+            if (cell.note >= 1 && cell.note <= 95) cell.note = clamp(cell.note + a.d, 1, 95);
+          }
+        }
+      });
     }
     case "paste": {
       if (!st.clip) return st;
@@ -212,18 +231,35 @@ export function useStore(initial: Song) {
 // ---- song-level edit helpers (used with {t:"edit"}) ----
 export const edits = {
   newPatternFor: (ch: number, pos: number) => (s: Song) => {
-    if (s.patterns.length >= LIMITS.patterns) return;
     const len = patternAt(s, ch, pos)?.rows.length ?? 32;
+    if (s.linked) {
+      if (s.patterns.length + 3 > LIMITS.patterns) return;
+      const n = groupCount(s);
+      for (let c = 0; c < CHANNELS; c++) { s.patterns.push(emptyPattern(len)); s.orders[c][pos] = 3 * n + c; }
+      return;
+    }
+    if (s.patterns.length >= LIMITS.patterns) return;
     s.patterns.push(emptyPattern(len));
     s.orders[ch][pos] = s.patterns.length - 1;
   },
   duplicatePatternFor: (ch: number, pos: number) => (s: Song) => {
+    if (s.linked) {
+      if (s.patterns.length + 3 > LIMITS.patterns) return;
+      const n = groupCount(s), g = groupAt(s, pos);
+      for (let c = 0; c < CHANNELS; c++) { s.patterns.push(structuredClone(s.patterns[3 * g + c])); s.orders[c][pos] = 3 * n + c; }
+      return;
+    }
     const src = patternAt(s, ch, pos);
     if (!src || s.patterns.length >= LIMITS.patterns) return;
     s.patterns.push(structuredClone(src));
     s.orders[ch][pos] = s.patterns.length - 1;
   },
   bumpPattern: (ch: number, pos: number, d: number) => (s: Song) => {
+    if (s.linked) {
+      const g = clamp(groupAt(s, pos) + d, 0, groupCount(s) - 1);
+      for (let c = 0; c < CHANNELS; c++) s.orders[c][pos] = 3 * g + c;
+      return;
+    }
     const cur = s.orders[ch][pos];
     if (cur === undefined) return;
     s.orders[ch][pos] = clamp(cur + d, 0, s.patterns.length - 1);
@@ -236,11 +272,47 @@ export const edits = {
     for (let ch = 0; ch < CHANNELS; ch++) if (s.orders[ch].length > 1) s.orders[ch].splice(pos, 1);
   },
   setPatternLength: (ch: number, pos: number, len: number) => (s: Song) => {
-    const p = patternAt(s, ch, pos);
-    if (!p) return;
     len = clamp(len, 1, LIMITS.rows);
-    while (p.rows.length < len) p.rows.push(emptyCell());
-    p.rows.length = len;
+    for (const c of s.linked ? [0, 1, 2] : [ch]) {
+      const p = patternAt(s, c, pos);
+      if (!p) continue;
+      while (p.rows.length < len) p.rows.push(emptyCell());
+      p.rows.length = len;
+    }
+  },
+  /** Turns linked patterns on (one group per distinct set of three patterns, copied) or off; does nothing if that is not possible. */
+  setLinked: (on: boolean) => (s: Song) => {
+    if (!on) { s.linked = false; return; }
+    if (s.linked || linkProblem(s) || s.patterns.length === 0) return;
+    const groups = new Map<string, number>();
+    const patterns: Song["patterns"] = [];
+    const orders: number[][] = [[], [], []];
+    for (let p = 0; p < s.orders[0].length; p++) {
+      const key = s.orders.map((o) => o[p]).join(",");
+      let g = groups.get(key);
+      if (g === undefined) {
+        g = groups.size;
+        groups.set(key, g);
+        for (let c = 0; c < CHANNELS; c++) patterns.push(structuredClone(s.patterns[s.orders[c][p]]));
+      }
+      for (let c = 0; c < CHANNELS; c++) orders[c].push(3 * g + c);
+    }
+    if (patterns.length > LIMITS.patterns) return;
+    s.patterns = patterns;
+    s.orders = orders as Song["orders"];
+    s.linked = true;
+  },
+  /** Adds a library or imported instrument, and its chord (an identical existing one is reused). */
+  addInstrumentFrom: (inst: Instrument, chord?: Chord) => (s: Song) => {
+    if (s.instruments.length >= LIMITS.instruments) return;
+    const x = structuredClone(inst);
+    x.default_chord = 0;
+    if (chord) {
+      let i = s.chords.findIndex((c) => c.hold === chord.hold && c.notes.join() === chord.notes.join());
+      if (i < 0 && s.chords.length < LIMITS.chords) { s.chords.push(structuredClone(chord)); i = s.chords.length - 1; }
+      if (i >= 0) x.default_chord = i + 1;
+    }
+    s.instruments.push(x);
   },
   addInstrument: () => (s: Song) => {
     if (s.instruments.length >= LIMITS.instruments) return;

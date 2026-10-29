@@ -133,6 +133,10 @@ pub struct Song {
     pub instruments: Vec<Instrument>,
     #[serde(default)]
     pub chords: Vec<Chord>,
+    /// Editing aid only (the player ignores it): pattern `3n + ch` is voice `ch` of combined pattern `n`, and the three
+    /// order lists are identical apart from that, so the editor can work on all voices at once like a MOD tracker.
+    #[serde(default)]
+    pub linked: bool,
 }
 
 impl Song {
@@ -148,6 +152,7 @@ impl Song {
             orders: [vec![0], vec![0], vec![0]],
             instruments: vec![Instrument::simple("Pulse", 0x40, 0x09, 0xA9)],
             chords: vec![],
+            linked: false,
         }
     }
     pub fn clock_hz(&self) -> f64 { if self.pal { 985_248.0 } else { 1_022_727.0 } }

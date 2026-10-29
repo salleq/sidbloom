@@ -7,7 +7,7 @@ Compose C64 music with a clearer interface and export real, C64-compatible `.sid
 
 ![SIDbloom playing its demo song](docs/screenshots/editor-light.png)
 
-- Tracker UI (React + Tauri): 3 voices, order list, instrument editor (ADSR, waveform table, pulse width + sweep, chords), filter and filter effects (cutoff, resonance, mode, sweep), undo/redo, piano keyboard, oscilloscope, light/dark theme
+- Tracker UI (React + Tauri): 3 voices, order list, instrument editor (ADSR, waveform table, pulse width + sweep, chords) with a library of drum, bass, lead and pad presets and `.sidi` instrument files, MOD-style linked patterns (one pattern for all voices; optional), copy/paste of selected cells, filter and filter effects (cutoff, resonance, mode, sweep), undo/redo, piano keyboard, oscilloscope, light/dark theme
 - Realtime audio: the same Rust engine + reSID, compiled to WebAssembly, running in an AudioWorklet; edits made during playback are heard immediately without restarting
 - Export `.sid` (PSID v2, PAL/NTSC, 6581/8580) and a self-starting `.prg` (`LOAD"*",8,1` + `RUN`) with an own 6502 player; verified register-for-register against the engine in a 6502 emulator and played back by the independent `sidplayfp`
 - **MIDI file import** (`.mid`): pick which parts play on the three voices; chords are reduced to the top note

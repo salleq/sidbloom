@@ -37,7 +37,7 @@ try {
 
   // instrument, chord and filter panels: tall window, clip to the right column
   {
-    const page = await open("light", 1500);
+    const page = await open("light", 1650);
     await page.locator(".right-col").screenshot({ path: `${out}/instrument-filter.png` });
     await page.context().close();
   }

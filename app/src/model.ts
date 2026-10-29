@@ -46,6 +46,8 @@ export interface Song {
   orders: [number[], number[], number[]];
   instruments: Instrument[];
   chords: Chord[];
+  /** Editing aid (see core/src/model.rs): pattern 3n+ch is voice ch of combined pattern n. */
+  linked?: boolean;
 }
 
 export const LIMITS = { instruments: 64, patterns: 128, rows: 64, waveSteps: 128, chords: 32, chordLen: 16 };
@@ -101,3 +103,20 @@ export const noteFromKey = (key: string, octave: number): number | null => {
   const n = octave * 12 + off + 1;
   return n >= 1 && n <= 95 ? n : null;
 };
+
+/** Number of combined patterns in a linked song. */
+export const groupCount = (s: Song) => Math.floor(s.patterns.length / 3);
+/** Combined pattern number shown at an order position of a linked song. */
+export const groupAt = (s: Song, pos: number) => Math.floor((s.orders[0][pos] ?? 0) / 3);
+
+/** Why a song cannot be switched to linked patterns (null: it can). Voices advance independently in the
+ *  player, so differing lengths would change the timing. */
+export function linkProblem(s: Song): string | null {
+  const n = s.orders[0].length;
+  if (s.orders.some((o) => o.length !== n)) return "the voices have different numbers of positions";
+  for (let p = 0; p < n; p++) {
+    const lens = s.orders.map((o) => s.patterns[o[p]]?.rows.length);
+    if (lens.some((l) => l === undefined || l !== lens[0])) return `the voices' patterns at position ${p.toString(16).toUpperCase().padStart(2, "0")} have different lengths`;
+  }
+  return null;
+}

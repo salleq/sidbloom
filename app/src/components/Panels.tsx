@@ -1,7 +1,9 @@
 import { useId } from "react";
 import {
-  FX_HELP, LIMITS, WAVE_BITS, hex, orderLength, patternAt, type Instrument, type Song,
+  FX_HELP, LIMITS, WAVE_BITS, groupAt, hex, linkProblem, orderLength, patternAt, type Chord, type Instrument, type Song,
 } from "../model";
+import { LIBRARY, type Preset } from "../library";
+import { instrumentFile, pickInstrument, saveFile } from "../files";
 import { edits, type Action } from "../store";
 
 type D = (a: Action) => void;
@@ -19,7 +21,9 @@ export function OrderPanel({ song, orderPos, ch, dispatch, playOrder }: { song: 
             className={`order-row${p === orderPos ? " sel" : ""}${p === playOrder ? " playing" : ""}`}
             onClick={() => dispatch({ t: "orderPos", pos: p })}>
             <b>{hex(p)}</b>
-            {[0, 1, 2].map((c) => <span key={c}>{song.orders[c][p] === undefined ? "--" : hex(song.orders[c][p])}</span>)}
+            {song.linked
+              ? <span className="wide">{song.orders[0][p] === undefined ? "--" : hex(Math.floor(song.orders[0][p] / 3))}</span>
+              : [0, 1, 2].map((c) => <span key={c}>{song.orders[c][p] === undefined ? "--" : hex(song.orders[c][p])}</span>)}
           </button>
         ))}
       </div>
@@ -27,15 +31,21 @@ export function OrderPanel({ song, orderPos, ch, dispatch, playOrder }: { song: 
         <button onClick={() => dispatch({ t: "edit", fn: edits.insertOrder(orderPos) })} title="Insert a position after this one">+ Position</button>
         <button onClick={() => dispatch({ t: "edit", fn: edits.deleteOrder(orderPos) })} disabled={n <= 1}>− Position</button>
       </div>
-      <div className="sub">Voice {ch + 1} at position {hex(orderPos)}</div>
+      <label className="chip" title={linkProblem(song) && !song.linked ? `Cannot link: ${linkProblem(song)}` : "One pattern number covers all three voices, like a .mod tracker"}>
+        <input type="checkbox" aria-label="Linked patterns" checked={!!song.linked} disabled={!song.linked && linkProblem(song) !== null}
+          onChange={(e) => dispatch({ t: "edit", fn: edits.setLinked(e.target.checked) })} />
+        <span>Linked patterns</span>
+      </label>
+      {!song.linked && linkProblem(song) && <div className="sub">Cannot link: {linkProblem(song)}.</div>}
+      <div className="sub">{song.linked ? `All voices at position ${hex(orderPos)}` : `Voice ${ch + 1} at position ${hex(orderPos)}`}</div>
       <div className="btn-row">
         <button onClick={() => dispatch({ t: "edit", fn: edits.bumpPattern(ch, orderPos, -1) })} aria-label="Previous pattern">◀</button>
-        <span className="mono">pattern {hex(song.orders[ch][orderPos] ?? 0)}</span>
+        <span className="mono">pattern {hex(song.linked ? groupAt(song, orderPos) : song.orders[ch][orderPos] ?? 0)}</span>
         <button onClick={() => dispatch({ t: "edit", fn: edits.bumpPattern(ch, orderPos, 1) })} aria-label="Next pattern">▶</button>
       </div>
       <div className="btn-row">
-        <button onClick={() => dispatch({ t: "edit", fn: edits.newPatternFor(ch, orderPos) })} disabled={song.patterns.length >= LIMITS.patterns}>New</button>
-        <button onClick={() => dispatch({ t: "edit", fn: edits.duplicatePatternFor(ch, orderPos) })} disabled={song.patterns.length >= LIMITS.patterns}>Duplicate</button>
+        <button onClick={() => dispatch({ t: "edit", fn: edits.newPatternFor(ch, orderPos) })} disabled={song.patterns.length + (song.linked ? 3 : 1) > LIMITS.patterns}>New</button>
+        <button onClick={() => dispatch({ t: "edit", fn: edits.duplicatePatternFor(ch, orderPos) })} disabled={song.patterns.length + (song.linked ? 3 : 1) > LIMITS.patterns}>Duplicate</button>
       </div>
       <label className="field">Rows
         <input type="number" min={1} max={LIMITS.rows} value={len}
@@ -76,11 +86,22 @@ function EnvelopeGraph({ a, d, s, r }: { a: number; d: number; s: number; r: num
   );
 }
 
-export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Song; inst: number; dispatch: D; onPreview: () => void }) {
+export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Song; inst: number; dispatch: D; onPreview: (note?: number) => void }) {
   const i = inst - 1;
   const ins = song.instruments[i];
   const upd = (fn: (x: Instrument) => void) => dispatch({ t: "edit", fn: edits.updateInstrument(i, fn) });
   if (!ins) return null;
+  const full = song.instruments.length >= LIMITS.instruments;
+  const addFrom = (instrument: Instrument, chord?: Chord, note?: number) => {
+    dispatch({ t: "edit", fn: edits.addInstrumentFrom(instrument, chord) });
+    dispatch({ t: "curInst", i: song.instruments.length + 1 });
+    // the new instrument is only in the song after this event; let the audio engine see it before previewing
+    setTimeout(() => onPreview(note), 60);
+  };
+  const exportInst = async () => {
+    const chord = ins.default_chord ? song.chords[ins.default_chord - 1] : undefined;
+    await saveFile(`${ins.name.trim().replace(/[^a-z0-9-_]+/gi, "_") || "instrument"}.sidi`, instrumentFile(ins, chord), "sidi");
+  };
   const [A, D, S, R] = [ins.attack_decay >> 4, ins.attack_decay & 15, ins.sustain_release >> 4, ins.sustain_release & 15];
   return (
     <section className="panel">
@@ -91,7 +112,21 @@ export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Son
         </select>
         <button onClick={() => { dispatch({ t: "edit", fn: edits.addInstrument() }); dispatch({ t: "curInst", i: song.instruments.length + 1 }); }}
           disabled={song.instruments.length >= LIMITS.instruments} title="New instrument">＋</button>
-        <button onClick={onPreview} title="Hear this instrument">♪ Test</button>
+        <button onClick={() => onPreview()} title="Hear this instrument">♪ Test</button>
+      </div>
+      <div className="btn-row">
+        <select aria-label="Instrument library" value="" disabled={full}
+          onChange={(e) => { const p = LIBRARY[Number(e.target.value)]; if (p) addFrom(p.instrument, p.chord, p.note); }}>
+          <option value="">Add from library…</option>
+          {[...new Set(LIBRARY.map((p) => p.category))].map((cat) => (
+            <optgroup key={cat} label={cat}>
+              {LIBRARY.map((p: Preset, k) => (p.category === cat ? <option key={k} value={k}>{p.instrument.name}</option> : null))}
+            </optgroup>
+          ))}
+        </select>
+        <button disabled={full} title="Add an instrument from a .sidi file" data-testid="import-instrument"
+          onClick={() => void pickInstrument().then((r) => r && addFrom(r.instrument, r.chord))}>Import</button>
+        <button title="Save this instrument as a .sidi file" onClick={() => void exportInst()} data-testid="export-instrument">Export</button>
       </div>
       <label className="field">Name
         <input value={ins.name} maxLength={24} onChange={(e) => upd((x) => { x.name = e.target.value; })} />
@@ -201,6 +236,7 @@ export function HelpPanel() {
         <dt>Del / Backspace</dt><dd>Clear cell · Ins inserts a row</dd>
         <dt>[ ]  − =</dt><dd>Octave · instrument</dd>
         <dt>Space / Enter</dt><dd>Play song / play from cursor</dd>
+        <dt>Ctrl+A · Ctrl+[ ]</dt><dd>Select the whole pattern · transpose selection ±1 (Shift: ±12)</dd>
         <dt>Drag, Shift+arrows</dt><dd>Select cells · Ctrl+C / X / V copy, cut, paste</dd>
         <dt>Ctrl+Z / Y / S / O</dt><dd>Undo · redo · save · open</dd>
       </dl>

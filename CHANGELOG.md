@@ -7,6 +7,8 @@ All notable changes to SIDbloom are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- Instrument library: 23 presets (kick, snares, clap, hihats, tom, crash, ride, basses, leads, pad, arpeggios), and Import / Export of single instruments as `.sidi` files.
+- Linked patterns (on for new songs, per song): one pattern number covers all three voices, like a `.mod` tracker. Existing songs can be switched when their voices line up. Also Ctrl+A to select a whole pattern and Ctrl+[ / ] to transpose the selection.
 - Select cells with the mouse (drag) or Shift+arrows; copy, cut and paste them with Ctrl+C / X / V or the new buttons. Del clears the selection.
 - New, Open and the imports now ask before they replace a song with unsaved changes; closing the browser tab warns too.
 
