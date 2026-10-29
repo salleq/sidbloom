@@ -24,6 +24,7 @@ export interface State {
   sid8580: boolean;
   fileName: string;
   dirty: boolean;
+  coal?: { key: string; at: number }; // last coalescable edit, see the "edit" action
 }
 
 export type Action =
@@ -218,7 +219,11 @@ export function reducer(st: State, a: Action): State {
       });
     }
     case "edit": {
-      const next = commit(st, a.fn);
+      const now = Date.now();
+      // Repeated edits of one control (a knob drag, a hex entry) share a single undo step.
+      const merge = !!a.coalesce && st.coal?.key === a.coalesce && now - st.coal.at < 800 && st.past.length > 0;
+      const base = commit(st, a.fn);
+      const next: State = { ...base, coal: a.coalesce ? { key: a.coalesce, at: now } : undefined, past: merge ? st.past : base.past };
       return clampCursor({ ...next, curInst: clamp(next.curInst, 1, Math.max(1, next.song.instruments.length)), orderPos: clamp(next.orderPos, 0, orderLength(next.song) - 1) });
     }
   }

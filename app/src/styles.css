@@ -135,3 +135,26 @@ input[type="number"] { width: 64px; }
 .modal h2 { margin: 0; font-size: 16px; }
 .modal select { max-width: 70%; min-width: 0; }
 .btn-row.end { justify-content: flex-end; }
+
+/* VST-style controls */
+.knobs { display: flex; flex-wrap: wrap; gap: 6px 10px; justify-content: space-between; }
+.knob { display: flex; flex-direction: column; align-items: center; width: 56px; color: var(--muted); font-size: 11px; user-select: none; }
+.knob [role="slider"] { touch-action: none; cursor: ns-resize; border-radius: 50%; }
+.knob [role="slider"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.knob-track { fill: none; stroke: var(--line); stroke-width: 4; stroke-linecap: round; }
+.knob-value { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; }
+.knob-cap { fill: var(--panel2); stroke: var(--line); }
+.knob-tick { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
+.knob:hover .knob-cap, .knob.active .knob-cap { stroke: var(--accent); }
+.knob-val { font-family: var(--mono); color: var(--text); line-height: 1; margin-top: -2px; }
+.knob-label { white-space: nowrap; }
+.env-edit { touch-action: none; }
+.env-edit .env-fill { fill: var(--accent); opacity: .15; stroke: none; }
+.env-guide, .pad-grid { stroke: var(--line); stroke-dasharray: 3 3; }
+.env-handle { fill: var(--panel); stroke: var(--accent); stroke-width: 2; cursor: grab; }
+.env-handle:hover, .env-handle.on { fill: var(--accent); }
+.pad { width: 100%; height: 110px; background: var(--panel2); border-radius: 8px; touch-action: none; cursor: crosshair; }
+.pad:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pad-curve { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.pad-guide { stroke: var(--muted); stroke-opacity: .5; }
+.pad-dot { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
