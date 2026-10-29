@@ -170,3 +170,14 @@ fn chords_cycle_and_match_the_player() {
     assert_same(&s, 36, "no chord instrument");
 }
 
+
+#[test]
+fn shared_duplicate_and_unused_patterns_match_the_player() {
+    let mut s = project::demo_song();
+    let (a, b, c) = (s.patterns[0].clone(), s.patterns[1].clone(), s.patterns[2].clone());
+    let mut other = a.clone();
+    other.rows[2] = Cell { note: 60, inst: 1, ..Default::default() };
+    s.patterns = vec![a.clone(), b.clone(), c.clone(), other, a, b, c, Pattern::new(8)];
+    s.orders = [vec![0, 3, 4], vec![1, 5, 1], vec![2, 6, 2]];
+    assert_same(&s, 600, "duplicates");
+}
