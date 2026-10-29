@@ -4,30 +4,29 @@ All notable changes to SIDbloom are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.0] — 2026-10-29, first public preview
 
-### Added
+The first version that can be used to write music from start to finish: compose in a tracker, hear it,
+export real C64 files, and bring music in from SID-Wizard and MIDI.
+
+The sections below are the first public preview; the lists right after this paragraph are what was added while it was being finished.
+
+### Also in this release
 - Instrument library: 23 presets (kick, snares, clap, hihats, tom, crash, ride, basses, leads, pad, arpeggios), and Import / Export of single instruments as `.sidi` files.
 - Linked patterns (on for new songs, per song): one pattern number covers all three voices, like a `.mod` tracker. Existing songs can be switched when their voices line up. Also Ctrl+A to select a whole pattern and Ctrl+[ / ] to transpose the selection.
 - Select cells with the mouse (drag) or Shift+arrows; copy, cut and paste them with Ctrl+C / X / V or the new buttons. Del clears the selection.
 - New, Open and the imports now ask before they replace a song with unsaved changes; closing the browser tab warns too.
-
 - Playback modes: **Space** loops the current pattern, **Shift+Space** (or the Song button) plays the whole song, **Enter** plays from the cursor. Double-clicking a position in the song order plays that pattern.
 - Octave buttons next to the octave number, and `<` / `>` and F1 / F2 as octave keys that work on a Finnish keyboard (F3 / F4: previous / next instrument).
 - **Save** now overwrites the file the project was opened from or last saved to; **Save As…** (Ctrl+Shift+S) asks for a new name. In browsers without file access, Save still downloads.
 
-### Changed
+### Changes along the way
 - The side column is a set of tabs (Song, Instrument, Chords, Filter, Help) instead of one long scrolling list; the instrument's pulse and waveform sections can be folded.
 - The Linux package is now called `sidbloom` (it was `si-dbloom`). The desktop entry still shows "SIDbloom". Remove the old package first: `sudo dpkg -r si-dbloom`.
 - Exported `.sid` / `.prg` files store each distinct pattern once and leave out unused ones, so switching a song to linked patterns no longer makes the file bigger.
 
-### Fixed
+### Fixes along the way
 - A new song gave all three voices the same pattern, so editing one voice edited all. Each voice now has its own pattern.
-
-## [0.1.0] — first public preview
-
-The first version that can be used to write music from start to finish: compose in a tracker, hear it,
-export real C64 files, and bring music in from SID-Wizard and MIDI.
 
 ### Composing
 - Three-voice tracker: note, instrument, effect and parameter per cell, an order list shared by the voices,
@@ -71,5 +70,4 @@ export real C64 files, and bring music in from SID-Wizard and MIDI.
   32 chords of up to 16 notes, 255 order positions.
 - Windows ARM64 is provided as an NSIS installer only (no `.msi`).
 
-[Unreleased]: https://github.com/salleq/sidbloom/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/salleq/sidbloom/releases/tag/v0.1.0

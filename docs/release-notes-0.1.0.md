@@ -8,6 +8,9 @@ A modern, free and open-source tracker for three-voice C64 SID music. Write musi
 - **Export** `.sid` files (play on a C64, in VICE, SIDPlay…) and a self-starting `.prg` (`LOAD"*",8,1` + `RUN`).
   Your own exports **open again for editing**.
 - **Import** SID-Wizard 1.x modules (`.swm`), MIDI files (`.mid`), and play notes from a **MIDI keyboard**.
+- **Play** the current pattern in a loop (Space), the whole song (Shift+Space) or from the cursor (Enter); double-click a
+  position in the song order to hear that pattern. Octave buttons and `<` `>` / F1 F2 keys work on a Finnish keyboard.
+- **Save** overwrites the project file, **Save As…** asks for a new name. The side column is tabs instead of one long list.
 - Windows, macOS and Linux, on x64 and ARM64.
 
 ### Downloads
@@ -21,6 +24,8 @@ A modern, free and open-source tracker for three-voice C64 SID music. Write musi
 `SHA256SUMS.txt` lists the checksums of every file.
 
 ### Please read
+- **Linux `.deb`:** the package is now called `sidbloom` (earlier test builds installed as `si-dbloom`). Remove the old one
+  first: `sudo dpkg -r si-dbloom`.
 - The installers are **not signed**, so the system warns on first start. macOS: right-click the app → *Open*.
   Windows: *More info* → *Run anyway*. Linux AppImage: `chmod +x` it first.
 - This is a **preview**. The author has not yet listened to the Windows and macOS builds or played the exported files on a real
