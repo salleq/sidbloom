@@ -1,10 +1,10 @@
-import { useId } from "react";
 import {
   FX_HELP, LIMITS, WAVE_BITS, groupAt, hex, linkProblem, orderLength, patternAt, type Chord, type Instrument, type Song,
 } from "../model";
 import { LIBRARY, type Preset } from "../library";
 import { instrumentFile, pickInstrument, saveFile } from "../files";
 import { edits, type Action } from "../store";
+import { EnvelopeEditor, FilterPad, Knob } from "./Controls";
 
 type D = (a: Action) => void;
 
@@ -56,40 +56,10 @@ export function OrderPanel({ song, orderPos, ch, dispatch, playOrder }: { song: 
 }
 
 /* ---------- instrument editor ---------- */
-function Slider({ label, value, max, onChange, hexOut = true }: { label: string; value: number; max: number; onChange: (v: number) => void; hexOut?: boolean }) {
-  const id = useId();
-  return (
-    <label className="slider" htmlFor={id}>
-      <span>{label}</span>
-      <input id={id} type="range" min={0} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-      <output>{hexOut ? hex(value, max > 255 ? 3 : 1) : value}</output>
-    </label>
-  );
-}
-
-// Approximate SID envelope times (ms) for the attack and decay/release rates 0..15.
-const ATTACK_MS = [2, 8, 16, 24, 38, 56, 68, 80, 100, 250, 500, 800, 1000, 3000, 5000, 8000];
-const DECAY_MS = [6, 24, 48, 72, 114, 168, 204, 240, 300, 750, 1500, 2400, 3000, 9000, 15000, 24000];
-
-function EnvelopeGraph({ a, d, s, r }: { a: number; d: number; s: number; r: number }) {
-  const W = 220, H = 70;
-  const sus = s / 15;
-  const ta = Math.log10(ATTACK_MS[a] + 1), td = Math.log10(DECAY_MS[d] * (1 - sus) + 1), tr = Math.log10(DECAY_MS[r] * Math.max(sus, 0.1) + 1);
-  const total = ta + td + 0.6 + tr || 1;
-  const x = (t: number) => (t / total) * (W - 8) + 4;
-  const y = (v: number) => H - 6 - v * (H - 12);
-  const p = [[4, 0], [x(ta), 1], [x(ta + td), sus], [x(ta + td + 0.6), sus], [x(total), 0]];
-  return (
-    <svg className="env" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Envelope shape">
-      <polyline points={p.map(([px, v], i) => `${px},${i === 0 ? y(0) : y(v)}`).join(" ")} />
-    </svg>
-  );
-}
-
 export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Song; inst: number; dispatch: D; onPreview: (note?: number) => void }) {
   const i = inst - 1;
   const ins = song.instruments[i];
-  const upd = (fn: (x: Instrument) => void) => dispatch({ t: "edit", fn: edits.updateInstrument(i, fn) });
+  const upd = (fn: (x: Instrument) => void, key = "") => dispatch({ t: "edit", fn: edits.updateInstrument(i, fn), coalesce: key ? `inst${i}:${key}` : undefined });
   if (!ins) return null;
   const full = song.instruments.length >= LIMITS.instruments;
   const addFrom = (instrument: Instrument, chord?: Chord, note?: number) => {
@@ -131,20 +101,23 @@ export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Son
       <label className="field">Name
         <input value={ins.name} maxLength={24} onChange={(e) => upd((x) => { x.name = e.target.value; })} />
       </label>
-      <EnvelopeGraph a={A} d={D} s={S} r={R} />
-      <Slider label="Attack" value={A} max={15} onChange={(v) => upd((x) => { x.attack_decay = (v << 4) | (x.attack_decay & 15); })} />
-      <Slider label="Decay" value={D} max={15} onChange={(v) => upd((x) => { x.attack_decay = (x.attack_decay & 0xf0) | v; })} />
-      <Slider label="Sustain" value={S} max={15} onChange={(v) => upd((x) => { x.sustain_release = (v << 4) | (x.sustain_release & 15); })} />
-      <Slider label="Release" value={R} max={15} onChange={(v) => upd((x) => { x.sustain_release = (x.sustain_release & 0xf0) | v; })} />
-      <Slider label="Pulse width" value={ins.pulse_width} max={4095} onChange={(v) => upd((x) => { x.pulse_width = v; })} />
-      <h3>Pulse sweep <small>moves the pulse width every frame</small></h3>
-      <label className="slider">
-        <span>Speed</span>
-        <input type="range" min={-64} max={64} value={ins.pulse_speed} onChange={(e) => upd((x) => { x.pulse_speed = Number(e.target.value); })} />
-        <output>{ins.pulse_speed}</output>
-      </label>
-      <Slider label="Sweep min" value={ins.pulse_min} max={4095} onChange={(v) => upd((x) => { x.pulse_min = Math.min(v, x.pulse_max); })} />
-      <Slider label="Sweep max" value={ins.pulse_max} max={4095} onChange={(v) => upd((x) => { x.pulse_max = Math.max(v, x.pulse_min); })} />
+      <EnvelopeEditor a={A} d={D} s={S} r={R} onChange={(p) => upd((x) => {
+        const ad = ((p.a ?? A) << 4) | (p.d ?? D), sr = ((p.s ?? S) << 4) | (p.r ?? R);
+        x.attack_decay = ad; x.sustain_release = sr;
+      }, "env")} />
+      <div className="knobs">
+        <Knob label="Attack" value={A} max={15} onChange={(v) => upd((x) => { x.attack_decay = (v << 4) | (x.attack_decay & 15); }, "a")} />
+        <Knob label="Decay" value={D} max={15} onChange={(v) => upd((x) => { x.attack_decay = (x.attack_decay & 0xf0) | v; }, "d")} />
+        <Knob label="Sustain" value={S} max={15} def={15} onChange={(v) => upd((x) => { x.sustain_release = (v << 4) | (x.sustain_release & 15); }, "s")} />
+        <Knob label="Release" value={R} max={15} onChange={(v) => upd((x) => { x.sustain_release = (x.sustain_release & 0xf0) | v; }, "r")} />
+      </div>
+      <h3>Pulse <small>sweep moves the width every frame</small></h3>
+      <div className="knobs">
+        <Knob label="Width" value={ins.pulse_width} max={4095} def={2048} onChange={(v) => upd((x) => { x.pulse_width = v; }, "pw")} />
+        <Knob label="Sweep" value={ins.pulse_speed} min={-64} max={64} format={(v) => String(v)} onChange={(v) => upd((x) => { x.pulse_speed = v; }, "ps")} />
+        <Knob label="Sweep min" value={ins.pulse_min} max={4095} onChange={(v) => upd((x) => { x.pulse_min = Math.min(v, x.pulse_max); }, "pmin")} />
+        <Knob label="Sweep max" value={ins.pulse_max} max={4095} def={4095} onChange={(v) => upd((x) => { x.pulse_max = Math.max(v, x.pulse_min); }, "pmax")} />
+      </div>
       <label className="field">Chord
         <select aria-label="Default chord" value={ins.default_chord} onChange={(e) => upd((x) => { x.default_chord = Number(e.target.value); })}>
           <option value={0}>none</option>
@@ -203,13 +176,16 @@ export function ChordPanel({ song, dispatch }: { song: Song; dispatch: D }) {
 /* ---------- filter ---------- */
 export function FilterPanel({ song, dispatch }: { song: Song; dispatch: D }) {
   const f = song.filter;
-  const upd = (fn: (f: Song["filter"]) => void) => dispatch({ t: "edit", fn: (s) => fn(s.filter) });
+  const upd = (fn: (f: Song["filter"]) => void, key = "") => dispatch({ t: "edit", fn: (s) => fn(s.filter), coalesce: key ? `filter:${key}` : undefined });
   return (
     <section className="panel">
       <h2>Filter &amp; volume</h2>
-      <Slider label="Cutoff" value={f.cutoff} max={2047} onChange={(v) => upd((x) => { x.cutoff = v; })} />
-      <Slider label="Resonance" value={f.resonance} max={15} onChange={(v) => upd((x) => { x.resonance = v; })} />
-      <Slider label="Volume" value={f.volume} max={15} onChange={(v) => upd((x) => { x.volume = v; })} />
+      <FilterPad cutoff={f.cutoff} resonance={f.resonance} mode={f.mode} onChange={(p) => upd((x) => { x.cutoff = p.cutoff ?? x.cutoff; x.resonance = p.resonance ?? x.resonance; }, "pad")} />
+      <div className="knobs">
+        <Knob label="Cutoff" value={f.cutoff} max={2047} def={1024} onChange={(v) => upd((x) => { x.cutoff = v; }, "cut")} />
+        <Knob label="Resonance" value={f.resonance} max={15} onChange={(v) => upd((x) => { x.resonance = v; }, "res")} />
+        <Knob label="Volume" value={f.volume} max={15} def={15} onChange={(v) => upd((x) => { x.volume = v; }, "vol")} />
+      </div>
       <div className="chips">
         {[0, 1, 2].map((v) => (
           <label key={v} className="chip"><input type="checkbox" checked={(f.routing & (1 << v)) !== 0} onChange={() => upd((x) => { x.routing ^= 1 << v; })} /><span>Voice {v + 1}</span></label>
