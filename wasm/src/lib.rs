@@ -52,6 +52,16 @@ impl Player {
         Ok(Player { inner: Renderer::starting_at(song, model(is_8580), sample_rate, order_pos, row) })
     }
 
+    /// Starts another song on this player. Unlike `new` this does not rebuild the SID chip (slow), so it can
+    /// run inside the audio thread without stalling the sound.
+    pub fn restart(&mut self, song_json: &str, is_8580: bool, order_pos: usize, row: usize) -> Result<(), JsError> {
+        self.inner.restart(parse(song_json)?, model(is_8580), order_pos, row);
+        Ok(())
+    }
+
+    /// Builds the chip for a chip type and video standard ahead of time, so a later `restart` is quick.
+    pub fn prepare(&mut self, is_8580: bool, pal: bool) { self.inner.prepare(model(is_8580), pal) }
+
     /// Swaps in an edited song while playing (keeps the playback position).
     pub fn update(&mut self, song_json: &str) -> Result<(), JsError> {
         self.inner.update_song(parse(song_json)?);

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing draft release / tag to attach the installers to (for example v0.3.0)"
+        description: "Existing draft release / tag to attach the installers to (for example v0.3.1)"
         required: true
 
 jobs:

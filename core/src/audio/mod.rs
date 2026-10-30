@@ -42,6 +42,14 @@ pub struct Renderer {
     queue: Vec<i16>,
     pos: usize,
     sample_rate: u32,
+    /// Freshly built chips by (8580?, clock Hz): building one (filter tables, resampling filter) is slow, cloning is not.
+    pristine: Vec<(bool, u32, Sid)>,
+}
+
+fn build_sid(model: ChipModel, clock: u32, sample_rate: u32) -> Sid {
+    let mut sid = Sid::new(model);
+    sid.set_sampling_parameters(SamplingMethod::ResampleFast, clock, sample_rate);
+    sid
 }
 
 impl Renderer {
@@ -50,11 +58,45 @@ impl Renderer {
     }
 
     pub fn starting_at(song: Song, model: ChipModel, sample_rate: u32, order_pos: usize, row: usize) -> Self {
-        let clock = song.clock_hz();
-        let cycles_per_frame = (clock / song.frame_hz()).round() as u32;
-        let mut sid = Sid::new(model);
-        sid.set_sampling_parameters(SamplingMethod::ResampleFast, clock as u32, sample_rate);
-        Renderer { engine: Engine::start_at(song, order_pos, row), sid, cycles_per_frame, queue: Vec::new(), pos: 0, sample_rate }
+        let clock = song.clock_hz() as u32;
+        let proto = build_sid(model, clock, sample_rate);
+        Renderer {
+            cycles_per_frame: (song.clock_hz() / song.frame_hz()).round() as u32,
+            engine: Engine::start_at(song, order_pos, row),
+            sid: proto.clone(),
+            queue: Vec::new(),
+            pos: 0,
+            sample_rate,
+            pristine: vec![(matches!(model, ChipModel::Mos8580), clock, proto)],
+        }
+    }
+
+    /// Starts `song` over from the given position on a fresh chip. The slow part of building a chip is done only
+    /// the first time a chip type / video standard is used, so a realtime player can restart without stalling.
+    pub fn restart(&mut self, song: Song, model: ChipModel, order_pos: usize, row: usize) {
+        let clock = song.clock_hz() as u32;
+        let is_8580 = matches!(model, ChipModel::Mos8580);
+        let i = match self.pristine.iter().position(|(m, c, _)| *m == is_8580 && *c == clock) {
+            Some(i) => i,
+            None => {
+                self.pristine.push((is_8580, clock, build_sid(model, clock, self.sample_rate)));
+                self.pristine.len() - 1
+            }
+        };
+        self.sid = self.pristine[i].2.clone();
+        self.cycles_per_frame = (song.clock_hz() / song.frame_hz()).round() as u32;
+        self.engine = Engine::start_at(song, order_pos, row);
+        self.queue.clear();
+        self.pos = 0;
+    }
+
+    /// Builds the chip for this song's chip type and video standard ahead of time (see `restart`).
+    pub fn prepare(&mut self, model: ChipModel, pal: bool) {
+        let clock = if pal { 985_248 } else { 1_022_727 };
+        let is_8580 = matches!(model, ChipModel::Mos8580);
+        if !self.pristine.iter().any(|(m, c, _)| *m == is_8580 && *c == clock) {
+            self.pristine.push((is_8580, clock, build_sid(model, clock, self.sample_rate)));
+        }
     }
 
     pub fn sample_rate(&self) -> u32 { self.sample_rate }
@@ -180,6 +222,20 @@ mod tests {
             assert_eq!((a * 32768.0).round() as i16, *b);
         }
         assert_eq!(r.positions()[0].0, 0);
+    }
+
+    #[test]
+    fn restart_sounds_exactly_like_a_new_renderer() {
+        let song = single_voice_song(58, 0x40);
+        let mut fresh = Renderer::new(song.clone(), ChipModel::Mos8580, SAMPLE_RATE);
+        let mut reused = Renderer::new(crate::project::demo_song(), ChipModel::Mos8580, SAMPLE_RATE);
+        let mut junk = vec![0f32; 20_000];
+        reused.fill(&mut junk); // play something else first
+        reused.restart(song, ChipModel::Mos8580, 0, 0);
+        let (mut a, mut b) = (vec![0f32; 30_000], vec![0f32; 30_000]);
+        fresh.fill(&mut a);
+        reused.fill(&mut b);
+        assert_eq!(a, b);
     }
 
     #[test]

@@ -33,6 +33,17 @@ export function App({ initial }: { initial: Song }) {
     (window as unknown as { __sidbloom: unknown }).__sidbloom = audio; // handy for end-to-end tests
   }, [audio]);
 
+  // build the SID chip of the chosen type / video standard while idle, not when Play is pressed
+  useEffect(() => { audio.prepare(st.sid8580, st.song.pal); }, [audio, st.sid8580, st.song.pal]);
+
+  // open the audio output on the first click or key, so it has settled by the time Play is pressed
+  useEffect(() => {
+    const prime = () => audio.prime();
+    window.addEventListener("pointerdown", prime, { once: true });
+    window.addEventListener("keydown", prime, { once: true });
+    return () => { window.removeEventListener("pointerdown", prime); window.removeEventListener("keydown", prime); };
+  }, [audio]);
+
   useEffect(() => { document.documentElement.dataset.theme = theme === "auto" ? "" : theme; }, [theme]);
   useEffect(() => {
     if (!st.dirty) return;

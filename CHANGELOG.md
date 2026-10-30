@@ -6,8 +6,11 @@ All notable changes to SIDbloom are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-10-30
+
 ### Fixed
-- The first notes after pressing Play sounded wrong: a moment after Play the editor handed the (unchanged) song to the running player, which restarted the waveform table of every sounding note. The song is now only handed over when it was edited, and editing during playback only restarts the waveform table of an instrument whose own table changed.
+- The first rows after pressing Play came out too fast. Every Play rebuilt the SID chip inside the audio thread, which stalled the sound for a moment, and the player then raced through the missed time. The chip is now built once (and ahead of time when the chip type or PAL/NTSC is changed), and the audio output is opened on the first click or key press.
+- The first notes after pressing Play also restarted their waveform tables: a moment after Play the editor handed the unchanged song to the running player. The song is now only handed over when it was edited, and editing during playback only restarts the waveform table of an instrument whose own table changed.
 
 ## [0.3.0] — 2026-10-29
 
@@ -82,7 +85,8 @@ export real C64 files, and bring music in from SID-Wizard and MIDI.
   32 chords of up to 16 notes, 255 order positions.
 - Windows ARM64 is provided as an NSIS installer only (no `.msi`).
 
-[Unreleased]: https://github.com/salleq/sidbloom/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/salleq/sidbloom/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/salleq/sidbloom/releases/tag/v0.3.1
 [0.3.0]: https://github.com/salleq/sidbloom/releases/tag/v0.3.0
 [0.2.0]: https://github.com/salleq/sidbloom/releases/tag/v0.2.0
 [0.1.0]: https://github.com/salleq/sidbloom/releases/tag/v0.1.0

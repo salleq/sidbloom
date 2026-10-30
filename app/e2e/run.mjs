@@ -322,16 +322,16 @@ try {
     const a = window.__sidbloom;
     window.__updates = 0; window.__rows = [];
     const upd = a.update.bind(a); a.update = (s) => { window.__updates++; upd(s); };
-    const pos = a.onPositions; a.onPositions = (p) => { window.__rows.push([a.ctx.currentTime, p[0][0] * 64 + p[0][1]]); pos(p); };
+    const pos = a.onPositions; a.onPositions = (p) => { window.__rows.push([performance.now(), p[0][0] * 64 + p[0][1]]); pos(p); };
   });
   await page.getByTestId("play-song").click();
-  await page.waitForTimeout(2200);
+  await page.waitForTimeout(3000);
   assert.equal(await page.evaluate(() => window.__updates), 0, "Play alone must not update the running player");
   const speed = Number(await page.getByLabel("Speed").inputValue());
   const rate = await page.evaluate(() => {
-    // measured on the audio clock: a headless browser pulls audio faster than real time for the first few hundred ms
+    // measured on the wall clock, from the first position message: Play must not start with a racing playhead
     const r = window.__rows;
-    return (r[r.length - 1][1] - r[0][1]) / (r[r.length - 1][0] - r[0][0]);
+    return (r[r.length - 1][1] - r[0][1]) / ((r[r.length - 1][0] - r[0][0]) / 1000);
   });
   const expected = 50 / speed;
   assert.ok(Math.abs(rate - expected) / expected < 0.2, `rows per second ${rate.toFixed(2)}, expected ${expected.toFixed(2)}`);
@@ -341,7 +341,7 @@ try {
   assert.ok((await page.evaluate(() => window.__updates)) >= 1, "an edit during playback reaches the player");
   await page.keyboard.press("Space");
   await page.waitForFunction(() => !document.querySelector(".tcell.playing"));
-  step(`Play pushes no spurious update; rows advance on the audio clock at ${rate.toFixed(1)}/s (expected ${expected.toFixed(1)})`);
+  step(`Play pushes no spurious update; rows advance from the first moment at ${rate.toFixed(1)}/s (expected ${expected.toFixed(1)})`);
 
   // octave: buttons and keys that exist on a Finnish keyboard
   const octave = async () => Number(await page.getByTestId("octave").innerText());

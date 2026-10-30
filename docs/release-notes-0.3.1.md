@@ -1,4 +1,7 @@
-## SIDbloom 0.3.0
+## SIDbloom 0.3.1
+
+**Fixed in 0.3.1:** the first rows after pressing Play no longer come out too fast, and the first notes no longer restart
+their waveform tables. Everything else is as in 0.3.0 below.
 
 A modern, free and open-source tracker for three-voice C64 SID music. Write music, hear it, and export real C64 files.
 

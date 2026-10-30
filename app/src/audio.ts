@@ -47,12 +47,43 @@ export class AudioEngine {
         };
         this.ctx = ctx;
         this.node = node;
+        if (this.wanted) node.port.postMessage({ t: "prepare", ...this.wanted });
         this.analyser.current = analyser;
       })();
     }
     await this.starting;
     if (this.ctx!.state === "suspended") await this.ctx!.resume();
+    await this.steady();
   }
+
+  /**
+   * A new audio output pulls its first few hundred ms of audio much faster than real time (the clock of the
+   * context races ahead) while its buffer fills. Anything started in that window comes out too fast or
+   * with a playhead that runs ahead, so wait until the context clock keeps pace with the wall clock.
+   */
+  private async steady() {
+    const ctx = this.ctx!;
+    let good = 0;
+    let [c0, w0] = [ctx.currentTime, performance.now()];
+    for (let i = 0; i < 40 && good < 3; i++) {
+      await new Promise((r) => setTimeout(r, 40));
+      const [c1, w1] = [ctx.currentTime, performance.now()];
+      const ratio = ((c1 - c0) * 1000) / (w1 - w0);
+      good = ratio > 0.8 && ratio < 1.25 ? good + 1 : 0;
+      [c0, w0] = [c1, w1];
+    }
+  }
+
+  private wanted: { is8580: boolean; pal: boolean } | null = null;
+
+  /** Builds the SID chip for this chip type / video standard ahead of time, so the next Play does not stall the sound. */
+  prepare(is8580: boolean, pal: boolean) {
+    this.wanted = { is8580, pal };
+    this.node?.port.postMessage({ t: "prepare", is8580, pal });
+  }
+
+  /** Opens the audio output ahead of time (call from a user gesture), so the first Play starts at once and in time. */
+  prime() { void this.ensure(); }
 
   async play(song: Song, is8580: boolean, order = 0, row = 0, isPreview = false) {
     await this.ensure();
