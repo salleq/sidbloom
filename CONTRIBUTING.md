@@ -31,10 +31,3 @@ hiding it. Add a line to `CHANGELOG.md` under *Unreleased* for anything a user w
 ## Screenshots
 The images in `docs/screenshots/` come from `cd app && npm run build && npm run screenshots`. Regenerate them when the
 interface changes noticeably.
-
-## Releases
-Releases are automatic. Start commit titles (or the pull request title, when squash-merging) with `fix:` for a bug fix (patch
-version), `feat:` for a new feature (minor version) or `docs:` / `chore:` / `test:` for changes that need no release.
-After a merge to `main`, a "release PR" appears (or updates) with the new version and changelog; merging it creates the
-tag and the GitHub release, and the installers for every platform are built and attached to it (about 3 minutes).
-To rebuild the installers of an existing release, run the *Release* workflow by hand with its tag.

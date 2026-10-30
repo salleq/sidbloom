@@ -1,40 +1,22 @@
 name: Release
-# Merging a pull request to main updates the "release PR" (version bump + changelog, by release-please).
-# Merging the release PR creates the tag and the GitHub release, and this workflow then builds every installer
-# and attaches them (SHA256SUMS included) to that release. Commit titles decide the bump: "fix:" -> patch,
-# "feat:" -> minor, "feat!:" or a "BREAKING CHANGE:" footer -> major (minor while the version is below 1.0).
+# Pushing a tag like v0.4.1 builds every installer and attaches them, with SHA256SUMS.txt, to the release of that
+# tag; the release is created if it does not exist yet.
 # Run by hand ("Run workflow" with a tag) to rebuild and re-attach the installers of an existing release.
 on:
   push:
-    branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
         description: "Existing release / tag to attach the installers to (for example v0.4.0)"
         required: true
 
-jobs:
-  release-please:
-    name: release PR
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    outputs:
-      release_created: ${{ steps.rp.outputs.release_created }}
-      tag_name: ${{ steps.rp.outputs.tag_name }}
-    steps:
-      - id: rp
-        uses: googleapis/release-please-action@v4
-        with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
+jobs:
   build:
     name: release (${{ matrix.name }})
-    needs: release-please
-    if: ${{ !cancelled() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
     strategy:
       fail-fast: false
       matrix:
@@ -70,14 +52,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tauriScript: node app/node_modules/@tauri-apps/cli/tauri.js
-          tagName: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+          tagName: ${{ env.TAG }}
+          releaseName: "SIDbloom ${{ env.TAG }}"
+          releaseBody: "Unsigned preview build. See the README for installation notes (macOS: right-click > Open; Windows: SmartScreen > More info > Run anyway; Linux AppImage: chmod +x)."
           releaseDraft: false
+          prerelease: true
           args: ${{ matrix.args }}
 
   checksums:
     name: checksums
-    needs: [release-please, build]
-    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -85,7 +69,6 @@ jobs:
       - name: SHA256SUMS.txt for every file of the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
         run: |
           mkdir dl && cd dl
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*' --clobber
