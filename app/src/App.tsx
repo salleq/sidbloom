@@ -249,7 +249,7 @@ export function App({ initial }: { initial: Song }) {
     const s = stateRef.current;
     try {
       const bytes = exportSwm(s.song);
-      const name = `${slug(s.song.title)}.swm.prg`;
+      const name = `${slug(s.song.title).slice(0, 12)}.swm.prg`; // SID-Wizard shows file names of up to 16 characters
       if (!(await saveFile(name, bytes, "prg"))) return;
       const left = swmExportNotes(s.song);
       setNotes(left);
@@ -442,7 +442,7 @@ export function App({ initial }: { initial: Song }) {
           </nav>
           <div className="tab-body">
             {tab === "song" && <OrderPanel song={song} orderPos={st.orderPos} ch={st.cursor.ch} dispatch={dispatch} playOrder={playPos ? playPos[0][0] : null} onPlay={(p) => { dispatch({ t: "orderPos", pos: p }); void play("pattern", p); }} />}
-            {tab === "inst" && <InstrumentPanel song={song} inst={st.curInst} dispatch={dispatch} onPreview={(note) => hearNote(note ?? 58)} />}
+            {tab === "inst" && <InstrumentPanel song={song} inst={st.curInst} clip={st.instClip} dispatch={dispatch} onPreview={(note) => hearNote(note ?? 58)} />}
             {tab === "chords" && <ChordPanel song={song} dispatch={dispatch} />}
             {tab === "filter" && <FilterPanel song={song} dispatch={dispatch} />}
             {tab === "help" && <HelpPanel />}

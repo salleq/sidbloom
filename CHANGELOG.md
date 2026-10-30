@@ -6,6 +6,12 @@ All notable changes to SIDbloom are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Copy / Paste of instruments by part:** copy an instrument and paste only its ADSR, waveform table, pulse settings and / or chord into another.
+
+### Changed
+- The SID-Wizard export file name is cut to 12 characters.
+
 ## [0.4.0] — 2026-10-30
 
 ### Added
