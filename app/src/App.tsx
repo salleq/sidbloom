@@ -6,7 +6,7 @@ import { AudioEngine, type Positions } from "./audio";
 import { createMidiBackend, trackerNote, type MidiNote } from "./midi";
 import { confirmDiscard, openProject, pickMidi, pickSwm, saveFile, saveProject, type SaveTarget } from "./files";
 import { MidiDialog } from "./components/MidiDialog";
-import { NOTE_OFF, hex, noteFromKey, patternLoop, type Song } from "./model";
+import { NOTE_OFF, hex, noteFromKey, patternLoop, silenced, type Song } from "./model";
 import { selRect, useStore } from "./store";
 import { exportPrg, exportSid, exportSwm, importMidi, importSwm, midiParts, swmExportNotes, newSong, projectFits, validate, type MidiPart } from "./wasm";
 
@@ -68,7 +68,13 @@ export function App({ initial }: { initial: Song }) {
   const modeRef = useRef<PlayMode>("song");
   const loopPos = useRef(0);
   // what the engine plays: the whole song, or just the order position that is looped
-  const playable = useCallback((song: Song) => (modeRef.current === "pattern" ? patternLoop(song, loopPos.current) : song), []);
+  // voices that are muted, or not soloed while another voice is, are silent (playback only; exports are not affected)
+  const [mute, setMute] = useState([false, false, false]);
+  const [solo, setSolo] = useState([false, false, false]);
+  const audibleRef = useRef([true, true, true]);
+  const audible = solo.some(Boolean) ? solo : mute.map((m) => !m);
+  audibleRef.current = audible;
+  const playable = useCallback((song: Song) => silenced(modeRef.current === "pattern" ? patternLoop(song, loopPos.current) : song, audibleRef.current), []);
 
   const sentSong = useRef<Song | null>(null); // the song the player already has
   const play = useCallback(async (mode: PlayMode, pos?: number) => {
@@ -159,6 +165,15 @@ export function App({ initial }: { initial: Song }) {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [midi]);
+
+  // muting or soloing while playing is heard at once
+  const heardKey = audible.join();
+  const sentKey = useRef(heardKey);
+  useEffect(() => {
+    if (heardKey === sentKey.current) return;
+    sentKey.current = heardKey;
+    if (playingRef.current) { sentSong.current = stateRef.current.song; audio.update(playable(stateRef.current.song)); }
+  }, [heardKey, audio, playable]);
 
   // editing while playing: hand the changed song to the running player (debounced)
   useEffect(() => {
@@ -414,6 +429,8 @@ export function App({ initial }: { initial: Song }) {
       <main className="main">
         <div className="left">
           <Tracker song={song} orderPos={st.orderPos} cursor={st.cursor} sel={st.sel ? selRect(st) : null} playRows={playRows} onCursor={(c, extend) => dispatch({ t: "cursor", c, extend })}
+            audible={audible} mute={mute} solo={solo}
+            onMute={(ch) => setMute(mute.map((m, c) => (c === ch ? !m : m)))} onSolo={(ch) => setSolo(solo.map((m, c) => (c === ch ? !m : m)))}
             canPaste={!!st.clip} onCopyTrack={(ch) => dispatch({ t: "copyTrack", ch })} onPasteTrack={(ch) => dispatch({ t: "pasteTrack", ch })} />
           <div className="statusbar">
             <span>Pos <b>{hex(st.orderPos)}</b></span>
