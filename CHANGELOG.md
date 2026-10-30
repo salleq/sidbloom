@@ -6,6 +6,8 @@ All notable changes to SIDbloom are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-10-30
+
 ### Added
 - **Export to SID-Wizard** (`SW .swm` button): a SID-Wizard 1.x module saved as `name.swm.prg`. What cannot be represented is listed in a report.
 - **▶ From pattern** (Shift+Enter) plays the song from the start of the current pattern.
