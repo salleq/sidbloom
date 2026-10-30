@@ -1,13 +1,18 @@
 name: Release
-# Manual only. Releases are made by hand: run "Desktop build", try the installers, attach them to a draft
-# release (SHA256SUMS included) and publish it. Publishing a release therefore does NOT start a build.
-# Running this workflow builds every installer again and uploads them to the draft release for the tag you enter.
+# Pushing a tag like v0.4.1 builds every installer and attaches them, with SHA256SUMS.txt, to the release of that
+# tag; the release is created if it does not exist yet.
+# Run by hand ("Run workflow" with a tag) to rebuild and re-attach the installers of an existing release.
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing draft release / tag to attach the installers to (for example v0.3.1)"
+        description: "Existing release / tag to attach the installers to (for example v0.4.0)"
         required: true
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   build:
@@ -47,10 +52,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tauriScript: node app/node_modules/@tauri-apps/cli/tauri.js
-          tagName: ${{ inputs.tag }}
-          releaseName: "SIDbloom ${{ inputs.tag }}"
+          tagName: ${{ env.TAG }}
+          releaseName: "SIDbloom ${{ env.TAG }}"
           releaseBody: "Unsigned preview build. See the README for installation notes (macOS: right-click > Open; Windows: SmartScreen > More info > Run anyway; Linux AppImage: chmod +x)."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: true
           args: ${{ matrix.args }}
 
@@ -64,7 +69,6 @@ jobs:
       - name: SHA256SUMS.txt for every file of the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ inputs.tag }}
         run: |
           mkdir dl && cd dl
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*' --clobber
