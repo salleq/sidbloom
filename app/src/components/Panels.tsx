@@ -3,7 +3,7 @@ import {
 } from "../model";
 import { LIBRARY, type Preset } from "../library";
 import { instrumentFile, pickInstrument, saveFile } from "../files";
-import { edits, type Action } from "../store";
+import { edits, unusedInstruments, unusedPatternCount, type Action } from "../store";
 import { EnvelopeEditor, FilterPad, Knob } from "./Controls";
 
 type D = (a: Action) => void;
@@ -12,6 +12,13 @@ type D = (a: Action) => void;
 export function OrderPanel({ song, orderPos, ch, dispatch, playOrder, onPlay }: { song: Song; orderPos: number; ch: number; dispatch: D; playOrder: number | null; onPlay: (pos: number) => void }) {
   const n = orderLength(song);
   const len = patternAt(song, ch, orderPos)?.rows.length ?? 0;
+  const room = song.patterns.length + 3 <= LIMITS.patterns;
+  const unused = unusedPatternCount(song);
+  // the new page is inserted after the current position; move onto it
+  const addPage = (fn: (s: Song) => void) => {
+    dispatch({ t: "edit", fn });
+    dispatch({ t: "orderPos", pos: orderPos + 1 });
+  };
   return (
     <section className="panel">
       <h2>Song order</h2>
@@ -30,7 +37,7 @@ export function OrderPanel({ song, orderPos, ch, dispatch, playOrder, onPlay }: 
       </div>
       <div className="btn-row">
         <button onClick={() => dispatch({ t: "edit", fn: edits.insertOrder(orderPos) })} title="Insert a position after this one">+ Position</button>
-        <button onClick={() => dispatch({ t: "edit", fn: edits.deleteOrder(orderPos) })} disabled={n <= 1}>− Position</button>
+        <button onClick={() => dispatch({ t: "edit", fn: edits.deleteOrder(orderPos) })} disabled={n <= 1} title="Delete this position, and the patterns only it used">− Position</button>
       </div>
       <label className="chip" title={linkProblem(song) && !song.linked ? `Cannot link: ${linkProblem(song)}` : "One pattern number covers all three voices, like a .mod tracker"}>
         <input type="checkbox" aria-label="Linked patterns" checked={!!song.linked} disabled={!song.linked && linkProblem(song) !== null}
@@ -45,8 +52,14 @@ export function OrderPanel({ song, orderPos, ch, dispatch, playOrder, onPlay }: 
         <button onClick={() => dispatch({ t: "edit", fn: edits.bumpPattern(ch, orderPos, 1) })} aria-label="Next pattern">▶</button>
       </div>
       <div className="btn-row">
-        <button onClick={() => dispatch({ t: "edit", fn: edits.newPatternFor(ch, orderPos) })} disabled={song.patterns.length + (song.linked ? 3 : 1) > LIMITS.patterns}>New</button>
-        <button onClick={() => dispatch({ t: "edit", fn: edits.duplicatePatternFor(ch, orderPos) })} disabled={song.patterns.length + (song.linked ? 3 : 1) > LIMITS.patterns}>Duplicate</button>
+        <button onClick={() => addPage(edits.newPage(orderPos))} disabled={!room} title="Insert a new position with an empty pattern after this one">New</button>
+        <button onClick={() => addPage(edits.duplicatePage(orderPos))} disabled={!room} title="Insert a new position with a copy of this pattern after this one">Duplicate</button>
+        <button onClick={() => dispatch({ t: "edit", fn: edits.clearPattern(ch, orderPos) })} title={song.linked ? "Empty this pattern in all voices" : `Empty this pattern in voice ${ch + 1}`}>Clear</button>
+      </div>
+      <div className="btn-row">
+        <button onClick={() => dispatch({ t: "edit", fn: edits.removeUnusedPatterns() })} disabled={!unused} title="Delete the patterns that are not in the song order">
+          Remove unused{unused ? ` (${unused})` : ""}
+        </button>
       </div>
       <label className="field">Rows
         <input type="number" min={1} max={LIMITS.rows} value={len}
@@ -63,6 +76,7 @@ export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Son
   const upd = (fn: (x: Instrument) => void, key = "") => dispatch({ t: "edit", fn: edits.updateInstrument(i, fn), coalesce: key ? `inst${i}:${key}` : undefined });
   if (!ins) return null;
   const full = song.instruments.length >= LIMITS.instruments;
+  const unusedCount = Math.min(unusedInstruments(song).size, song.instruments.length - 1);
   const addFrom = (instrument: Instrument, chord?: Chord, note?: number) => {
     dispatch({ t: "edit", fn: edits.addInstrumentFrom(instrument, chord) });
     dispatch({ t: "curInst", i: song.instruments.length + 1 });
@@ -83,6 +97,7 @@ export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Son
         </select>
         <button onClick={() => { dispatch({ t: "edit", fn: edits.addInstrument() }); dispatch({ t: "curInst", i: song.instruments.length + 1 }); }}
           disabled={song.instruments.length >= LIMITS.instruments} title="New instrument">＋</button>
+        <button onClick={() => dispatch({ t: "edit", fn: edits.removeInstrument(i) })} disabled={song.instruments.length <= 1} title="Delete this instrument (rows that used it lose their instrument)" data-testid="delete-instrument">✕</button>
         <button onClick={() => onPreview()} title="Hear this instrument">♪ Test</button>
       </div>
       <div className="btn-row">
@@ -98,6 +113,11 @@ export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Son
         <button disabled={full} title="Add an instrument from a .sidi file" data-testid="import-instrument"
           onClick={() => void pickInstrument().then((r) => r && addFrom(r.instrument, r.chord))}>Import</button>
         <button title="Save this instrument as a .sidi file" onClick={() => void exportInst()} data-testid="export-instrument">Export</button>
+      </div>
+      <div className="btn-row">
+        <button disabled={!unusedCount} onClick={() => dispatch({ t: "edit", fn: edits.removeUnusedInstruments() })} title="Delete the instruments no pattern uses" data-testid="remove-unused-instruments">
+          Remove unused{unusedCount ? ` (${unusedCount})` : ""}
+        </button>
       </div>
       <label className="field">Name
         <input value={ins.name} maxLength={24} onChange={(e) => upd((x) => { x.name = e.target.value; })} />
@@ -218,8 +238,9 @@ export function HelpPanel() {
         <dt>&lt; &gt; · F1 F2 · [ ]</dt><dd>Octave down / up</dd>
         <dt>− = · F3 F4</dt><dd>Previous / next instrument</dd>
         <dt>Space</dt><dd>Loop the current pattern · Shift+Space plays the whole song</dd>
-        <dt>Enter</dt><dd>Play the song from the cursor</dd>
+        <dt>Enter · Shift+Enter</dt><dd>Play the song from the cursor · from the start of the current pattern</dd>
         <dt>Ctrl+A · Ctrl+[ ]</dt><dd>Select the whole pattern · transpose selection ±1 (Shift: ±12)</dd>
+        <dt>Copy / Paste in a voice header</dt><dd>Copy or replace a whole track of the pattern, no selecting needed</dd>
         <dt>Drag, Shift+arrows</dt><dd>Select cells · Ctrl+C / X / V copy, cut, paste</dd>
         <dt>Ctrl+Z / Y / O</dt><dd>Undo · redo · open</dd>
         <dt>Ctrl+S · Ctrl+Shift+S</dt><dd>Save · save as</dd>

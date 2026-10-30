@@ -9,11 +9,14 @@ interface Props {
   sel: Rect | null; // selected cells (null: only the cursor)
   playRows: (number | null)[]; // per channel: playing row in this order position, or null
   onCursor: (c: Partial<Cursor>, extend?: boolean) => void;
+  canPaste: boolean;
+  onCopyTrack: (ch: number) => void;
+  onPasteTrack: (ch: number) => void;
 }
 
 const FIELD_CLASS = ["note", "inst", "inst", "fx", "param", "param"] as const;
 
-export const Tracker = memo(function Tracker({ song, orderPos, cursor, sel, playRows, onCursor }: Props) {
+export const Tracker = memo(function Tracker({ song, orderPos, cursor, sel, playRows, onCursor, canPaste, onCopyTrack, onPasteTrack }: Props) {
   const rows = rowsAt(song, orderPos);
   const body = useRef<HTMLDivElement>(null);
   const follow = playRows.find((r) => r !== null) ?? null;
@@ -28,8 +31,11 @@ export const Tracker = memo(function Tracker({ song, orderPos, cursor, sel, play
         <div className="rownum" />
         {[0, 1, 2].map((ch) => (
           <div key={ch} className="chan-head">
-            Voice {ch + 1}
-            <span className="pat-id">pattern {hex(song.linked ? groupAt(song, orderPos) : song.orders[ch][orderPos] ?? 0)}</span>
+            <span>Voice {ch + 1} <span className="pat-id">pattern {hex(song.linked ? groupAt(song, orderPos) : song.orders[ch][orderPos] ?? 0)}</span></span>
+            <span className="track-btns">
+              <button className="mini" onClick={() => onCopyTrack(ch)} title={`Copy all of voice ${ch + 1} in this pattern`} data-testid={`copy-track-${ch}`}>Copy</button>
+              <button className="mini" onClick={() => onPasteTrack(ch)} disabled={!canPaste} title={`Replace voice ${ch + 1} in this pattern with the copied track`} data-testid={`paste-track-${ch}`}>Paste</button>
+            </span>
           </div>
         ))}
       </div>

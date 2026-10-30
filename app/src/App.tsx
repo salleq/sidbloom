@@ -8,7 +8,7 @@ import { confirmDiscard, openProject, pickMidi, pickSwm, saveFile, saveProject, 
 import { MidiDialog } from "./components/MidiDialog";
 import { NOTE_OFF, hex, noteFromKey, patternLoop, type Song } from "./model";
 import { selRect, useStore } from "./store";
-import { exportPrg, exportSid, importMidi, importSwm, midiParts, newSong, projectFits, validate, type MidiPart } from "./wasm";
+import { exportPrg, exportSid, exportSwm, importMidi, importSwm, midiParts, swmExportNotes, newSong, projectFits, validate, type MidiPart } from "./wasm";
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA") && (t as HTMLInputElement).type !== "checkbox" && (t as HTMLInputElement).type !== "range";
@@ -64,7 +64,7 @@ export function App({ initial }: { initial: Song }) {
 
   const playing = playPos !== null;
   playingRef.current = playing;
-  type PlayMode = "pattern" | "song" | "cursor";
+  type PlayMode = "pattern" | "song" | "here" | "cursor";
   const modeRef = useRef<PlayMode>("song");
   const loopPos = useRef(0);
   // what the engine plays: the whole song, or just the order position that is looped
@@ -77,7 +77,7 @@ export function App({ initial }: { initial: Song }) {
     modeRef.current = mode;
     loopPos.current = p;
     setMessage("");
-    const [order, row] = mode === "cursor" ? [p, s.cursor.row] : [0, 0];
+    const [order, row] = mode === "cursor" ? [p, s.cursor.row] : mode === "here" ? [p, 0] : [0, 0];
     setPlayPos([[mode === "pattern" ? p : order, row], [0, 0], [0, 0]]);
     sentSong.current = s.song;
     await audio.play(playable(s.song), s.sid8580, mode === "pattern" ? 0 : order, row);
@@ -198,6 +198,7 @@ export function App({ initial }: { initial: Song }) {
   }, [dispatch, stop]);
 
   const [notes, setNotes] = useState<string[]>([]);
+  const [notesAbout, setNotesAbout] = useState("imported song");
   const importSidWizard = useCallback(async () => {
     const f = await pickSwm();
     if (!f) return;
@@ -208,6 +209,7 @@ export function App({ initial }: { initial: Song }) {
       target.current = null;
       dispatch({ t: "load", song: r.song, fileName: f.name.replace(/\.(swm|prg|p00)$/i, "") + ".sidb" });
       setNotes(r.warnings);
+      setNotesAbout("imported song");
       setMessage(`Imported ${f.name}${r.warnings.length ? ` — ${r.warnings.length} things were approximated` : ""}`);
     } catch (e) {
       setMessage(`Cannot import ${f.name}: ${e instanceof Error ? e.message : e}`);
@@ -236,11 +238,27 @@ export function App({ initial }: { initial: Song }) {
       target.current = null;
       dispatch({ t: "load", song: r.song, fileName: m.name.replace(/\.(mid|midi|rmi)$/i, "") + ".sidb" });
       setNotes(r.warnings);
+      setNotesAbout("imported song");
       setMessage(`Imported ${m.name}${r.warnings.length ? ` — ${r.warnings.length} notes about the conversion` : ""}`);
     } catch (e) {
       setMessage(`Cannot import ${m.name}: ${e instanceof Error ? e.message : e}`);
     }
   }, [midiImport, dispatch, stop]);
+
+  const doExportSwm = useCallback(async () => {
+    const s = stateRef.current;
+    try {
+      const bytes = exportSwm(s.song);
+      const name = `${slug(s.song.title)}.swm.prg`;
+      if (!(await saveFile(name, bytes, "prg"))) return;
+      const left = swmExportNotes(s.song);
+      setNotes(left);
+      setNotesAbout("SID-Wizard export");
+      setMessage(`Exported ${name} (${bytes.length} bytes)${left.length ? ` — ${left.length} things were left out or approximated` : ""}`);
+    } catch (e) {
+      setMessage(`Cannot export for SID-Wizard: ${e instanceof Error ? e.message : e}`);
+    }
+  }, []);
 
   const doExport = useCallback(async (kind: "sid" | "prg") => {
     const s = stateRef.current;
@@ -277,7 +295,7 @@ export function App({ initial }: { initial: Song }) {
       if (e.altKey) return;
       switch (key) {
         case " ": e.preventDefault(); return void (playing ? stop() : play(e.shiftKey ? "song" : "pattern"));
-        case "Enter": e.preventDefault(); return void play("cursor");
+        case "Enter": e.preventDefault(); return void play(e.shiftKey ? "here" : "cursor");
         case "Escape": dispatch({ t: "deselect" }); return stop();
         case "ArrowUp": return act({ t: "move", drow: -1, extend: e.shiftKey });
         case "ArrowDown": return act({ t: "move", drow: 1, extend: e.shiftKey });
@@ -345,6 +363,7 @@ export function App({ initial }: { initial: Song }) {
             {playing ? "■ Stop" : "▶ Pattern"}
           </button>
           <button onClick={() => void play("song")} title="Play the whole song from the start (Shift+Space)" data-testid="play-song">▶ Song</button>
+          <button onClick={() => void play("here")} title="Play the song from the start of the current pattern (Shift+Enter)" data-testid="play-from-pattern">▶ From pattern</button>
           <button onClick={() => void play("cursor")} title="Play the song from the cursor (Enter)">▶ From cursor</button>
         </div>
         <div className="group">
@@ -370,6 +389,7 @@ export function App({ initial }: { initial: Song }) {
         <div className="group right">
           <button onClick={() => void doExport("sid")} className="accent" data-testid="export-sid">Export .sid</button>
           <button onClick={() => void doExport("prg")}>.prg</button>
+          <button onClick={() => void doExportSwm()} title="Export a SID-Wizard 1.x module (.swm.prg) to continue the tune in SID-Wizard" data-testid="export-swm">SW .swm</button>
           <button onClick={() => setTheme(theme === "dark" ? "light" : theme === "light" ? "auto" : "dark")} title="Theme" aria-label="Toggle theme">◑ {theme}</button>
         </div>
       </header>
@@ -383,7 +403,7 @@ export function App({ initial }: { initial: Song }) {
 
       {notes.length > 0 && (
         <details className="import-notes" data-testid="import-notes">
-          <summary>{notes.length} notes about the imported song (things approximated or left out)</summary>
+          <summary>{notes.length} notes about the {notesAbout} (things approximated or left out)</summary>
           <ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
           <button onClick={() => setNotes([])}>Dismiss</button>
         </details>
@@ -393,7 +413,8 @@ export function App({ initial }: { initial: Song }) {
 
       <main className="main">
         <div className="left">
-          <Tracker song={song} orderPos={st.orderPos} cursor={st.cursor} sel={st.sel ? selRect(st) : null} playRows={playRows} onCursor={(c, extend) => dispatch({ t: "cursor", c, extend })} />
+          <Tracker song={song} orderPos={st.orderPos} cursor={st.cursor} sel={st.sel ? selRect(st) : null} playRows={playRows} onCursor={(c, extend) => dispatch({ t: "cursor", c, extend })}
+            canPaste={!!st.clip} onCopyTrack={(ch) => dispatch({ t: "copyTrack", ch })} onPasteTrack={(ch) => dispatch({ t: "pasteTrack", ch })} />
           <div className="statusbar">
             <span>Pos <b>{hex(st.orderPos)}</b></span>
             <span>Row <b>{hex(st.cursor.row)}</b></span>
