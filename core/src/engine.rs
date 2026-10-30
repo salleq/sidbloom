@@ -78,7 +78,7 @@ impl Engine {
         if (clock - self.song.clock_hz()).abs() > 1.0 {
             self.freq_table = (0..=96).map(|n| note_freq(n, clock)).collect();
         }
-        self.song = song;
+        let old = std::mem::replace(&mut self.song, song);
         for ch in 0..CHANNELS {
             let len = self.song.orders[ch].len().max(1);
             if self.voices[ch].order_pos >= len { self.voices[ch].order_pos = 0; }
@@ -88,7 +88,11 @@ impl Engine {
                 Some(i) if i >= self.song.instruments.len() => self.voices[ch].inst = None,
                 _ => {}
             }
-            self.voices[ch].wave_pos = 0;
+            // the waveform table restarts only when the instrument's own table was edited; otherwise sounding notes keep their place
+            if let Some(i) = self.voices[ch].inst {
+                let same = old.instruments.get(i).map(|o| (&o.wave_table, o.wave_loop)) == Some((&self.song.instruments[i].wave_table, self.song.instruments[i].wave_loop));
+                if !same { self.voices[ch].wave_pos = 0; }
+            }
         }
     }
 

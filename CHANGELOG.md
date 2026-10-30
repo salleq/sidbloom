@@ -4,6 +4,11 @@ All notable changes to SIDbloom are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- The first notes after pressing Play sounded wrong: a moment after Play the editor handed the (unchanged) song to the running player, which restarted the waveform table of every sounding note. The song is now only handed over when it was edited, and editing during playback only restarts the waveform table of an instrument whose own table changed.
+
 ## [0.3.0] — 2026-10-29
 
 ### Added

@@ -314,6 +314,35 @@ try {
   assert.ok((await energy()) > 1, "MIDI note was not heard");
   step("MIDI note is heard and, with Rec off, not written");
 
+  // starting playback must not push an "edited" song to the player (that restarted sounding notes' waveform tables)
+  // and the rows must advance at the song's tempo
+  await page.reload();
+  await page.waitForSelector("[data-testid=tracker]");
+  await page.evaluate(() => {
+    const a = window.__sidbloom;
+    window.__updates = 0; window.__rows = [];
+    const upd = a.update.bind(a); a.update = (s) => { window.__updates++; upd(s); };
+    const pos = a.onPositions; a.onPositions = (p) => { window.__rows.push([a.ctx.currentTime, p[0][0] * 64 + p[0][1]]); pos(p); };
+  });
+  await page.getByTestId("play-song").click();
+  await page.waitForTimeout(2200);
+  assert.equal(await page.evaluate(() => window.__updates), 0, "Play alone must not update the running player");
+  const speed = Number(await page.getByLabel("Speed").inputValue());
+  const rate = await page.evaluate(() => {
+    // measured on the audio clock: a headless browser pulls audio faster than real time for the first few hundred ms
+    const r = window.__rows;
+    return (r[r.length - 1][1] - r[0][1]) / (r[r.length - 1][0] - r[0][0]);
+  });
+  const expected = 50 / speed;
+  assert.ok(Math.abs(rate - expected) / expected < 0.2, `rows per second ${rate.toFixed(2)}, expected ${expected.toFixed(2)}`);
+  await page.locator(".tracker").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("z");
+  await page.waitForTimeout(400);
+  assert.ok((await page.evaluate(() => window.__updates)) >= 1, "an edit during playback reaches the player");
+  await page.keyboard.press("Space");
+  await page.waitForFunction(() => !document.querySelector(".tcell.playing"));
+  step(`Play pushes no spurious update; rows advance on the audio clock at ${rate.toFixed(1)}/s (expected ${expected.toFixed(1)})`);
+
   // octave: buttons and keys that exist on a Finnish keyboard
   const octave = async () => Number(await page.getByTestId("octave").innerText());
   await page.locator(".tracker").click({ position: { x: 5, y: 5 } });

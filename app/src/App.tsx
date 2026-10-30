@@ -59,6 +59,7 @@ export function App({ initial }: { initial: Song }) {
   // what the engine plays: the whole song, or just the order position that is looped
   const playable = useCallback((song: Song) => (modeRef.current === "pattern" ? patternLoop(song, loopPos.current) : song), []);
 
+  const sentSong = useRef<Song | null>(null); // the song the player already has
   const play = useCallback(async (mode: PlayMode, pos?: number) => {
     const s = stateRef.current;
     const p = pos ?? s.orderPos;
@@ -67,6 +68,7 @@ export function App({ initial }: { initial: Song }) {
     setMessage("");
     const [order, row] = mode === "cursor" ? [p, s.cursor.row] : [0, 0];
     setPlayPos([[mode === "pattern" ? p : order, row], [0, 0], [0, 0]]);
+    sentSong.current = s.song;
     await audio.play(playable(s.song), s.sid8580, mode === "pattern" ? 0 : order, row);
   }, [audio, playable]);
   const stop = useCallback(() => { audio.stop(); setPlayPos(null); }, [audio]);
@@ -149,8 +151,8 @@ export function App({ initial }: { initial: Song }) {
 
   // editing while playing: hand the changed song to the running player (debounced)
   useEffect(() => {
-    if (!playing) return;
-    const t = window.setTimeout(() => audio.update(playable(st.song)), 120);
+    if (!playing || st.song === sentSong.current) return;
+    const t = window.setTimeout(() => { sentSong.current = st.song; audio.update(playable(st.song)); }, 120);
     return () => window.clearTimeout(t);
   }, [st.song, playing, audio, playable]);
 
