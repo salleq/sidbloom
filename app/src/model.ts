@@ -137,3 +137,29 @@ export function linkProblem(s: Song): string | null {
   }
   return null;
 }
+
+/**
+ * A copy of the song in which the voices that are not `audible` are silent: each of their patterns is replaced by one
+ * of the same length that selects a silent instrument and switches the gate off, so a note that is sounding (even a pad
+ * with a long release) stops at once. Positions stay the same.
+ */
+export function silenced(s: Song, audible: boolean[]): Song {
+  if (audible.every(Boolean)) return s;
+  const patterns = [...s.patterns];
+  const instruments = [...s.instruments, { name: "mute", attack_decay: 0, sustain_release: 0, pulse_width: 0x800, wave_table: [{ wave: 0, semis: 0 }], wave_loop: null, pulse_speed: 0, pulse_min: 0, pulse_max: 0x0fff, default_chord: 0 }];
+  const blanks = new Map<number, number>();
+  const orders = s.orders.map((order, ch) => {
+    if (audible[ch]) return order;
+    return order.map((idx) => {
+      const len = s.patterns[idx]?.rows.length ?? 1;
+      let b = blanks.get(len);
+      if (b === undefined) {
+        b = patterns.length;
+        patterns.push({ rows: Array.from({ length: len }, () => ({ ...emptyCell(), note: NOTE_OFF, inst: instruments.length })) });
+        blanks.set(len, b);
+      }
+      return b;
+    });
+  }) as Song["orders"];
+  return { ...s, patterns, instruments, orders };
+}

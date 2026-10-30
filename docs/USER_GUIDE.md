@@ -34,6 +34,7 @@ and export real `.sid` files that play on a C64 or in any SID player.
 | `-` `=` | Previous / next instrument |
 | Drag with the mouse, or Shift+arrows | Select cells (several rows and voices) |
 | Ctrl+C / Ctrl+X / Ctrl+V | Copy, cut, paste the selection at the cursor (a single cell when nothing is selected); Del clears the selection |
+| **M** / **S** in a voice header | Mute a voice, or solo it (then only soloed voices play). Works while playing and only affects what you hear, not exports |
 | **Copy** / **Paste** in a voice header | Copy a whole voice of the current pattern, and replace another voice (in this or any other pattern) with it; no selecting needed |
 | Ctrl+Z / Ctrl+Y | Undo / redo (200 steps) |
 | Ctrl+S / Ctrl+Shift+S / Ctrl+O | Save (overwrites the current file) / save as / open a `.sidb` project |

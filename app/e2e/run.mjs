@@ -173,6 +173,30 @@ try {
   step(`audio plays (peak ${level.toFixed(3)}), playhead follows`);
   await page.screenshot({ path: `${shots}/playing.png` });
 
+  // mute / solo voices while playing
+  const peak = () => page.evaluate(async () => {
+    const a = window.__sidbloom.analyser.current;
+    let hi = -1, lo = 1; // peak to peak: a silent SID leaves a small constant offset
+    for (let i = 0; i < 30; i++) {
+      const b = new Float32Array(a.fftSize); a.getFloatTimeDomainData(b);
+      for (const v of b) { hi = Math.max(hi, v); lo = Math.min(lo, v); }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return hi - lo;
+  });
+  for (const c of [0, 1, 2]) await page.getByTestId(`mute-${c}`).click();
+  await page.waitForTimeout(3000);
+  const quiet = await peak(); assert.ok(quiet < 0.005, `all voices muted: silence (peak ${quiet})`);
+  assert.equal(await page.locator(".chan-head.silent").count(), 3);
+  await page.getByTestId("solo-1").click();
+  assert.equal(await page.locator(".chan-head.silent").count(), 2, "solo wins over mute: only voice 2 is audible");
+  await page.waitForTimeout(300);
+  assert.ok((await peak()) > 0.01, "soloed voice is heard");
+  await page.getByTestId("solo-1").click();
+  for (const c of [0, 1, 2]) await page.getByTestId(`mute-${c}`).click();
+  assert.equal(await page.locator(".chan-head.silent").count(), 0);
+  step("mute and solo voices while playing");
+
   // editing during playback reaches the player without stopping it
   const before = await page.evaluate(() => window.__sidbloom.messages);
   await page.locator(".f.note").nth(40).click();

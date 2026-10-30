@@ -7,6 +7,7 @@ All notable changes to SIDbloom are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Mute / Solo** buttons (M, S) in each voice header; they act at once during playback and do not change exports.
 - **Copy / Paste of instruments by part:** copy an instrument and paste only its ADSR, waveform table, pulse settings and / or chord into another.
 
 ### Changed
