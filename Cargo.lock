@@ -163,7 +163,7 @@ dependencies = [
 
 [[package]]
 name = "sidbloom-wasm"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "js-sys",
  "serde_json",
@@ -173,7 +173,7 @@ dependencies = [
 
 [[package]]
 name = "sidcore"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "miniz_oxide",
  "mos6502",
