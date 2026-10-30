@@ -2,6 +2,7 @@
 pub mod embed;
 pub mod pack;
 pub mod psid;
+pub mod swm;
 
 pub use pack::{pack_song, PackError, DATA_BASE, INIT_ADDR, LOAD_ADDR, PLAY_ADDR};
 pub use embed::{extract as extract_project, EmbedError};

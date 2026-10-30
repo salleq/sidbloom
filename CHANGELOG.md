@@ -6,6 +6,17 @@ All notable changes to SIDbloom are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Export to SID-Wizard** (`SW .swm` button): a SID-Wizard 1.x module saved as `name.swm.prg`. What cannot be represented is listed in a report.
+- **▶ From pattern** (Shift+Enter) plays the song from the start of the current pattern.
+- **Copy / Paste** buttons in each voice header copy and replace a whole track of a pattern, no selecting needed.
+- Delete an instrument (✕) and **Remove unused** instruments; **Clear** the current pattern and **Remove unused** patterns.
+
+### Changed
+- **New** and **Duplicate** in the song order now add a new position after the current one (holding an empty pattern or a copy) and move onto it, instead of replacing the pattern at the current position.
+- **− Position** also deletes the patterns that only that position used.
+- SID-Wizard import: the author-info text is split at its colon into author and title; vibrato effects have their amplitude and rate nibbles the right way round and a zero amplitude (how modules stop vibrato) no longer leaves an effect; a long pulse sweep stored as several rows is read as one.
+
 ## [0.3.1] — 2026-10-30
 
 ### Fixed

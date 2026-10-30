@@ -38,6 +38,20 @@ pub fn export_prg(song_json: &str) -> Result<Vec<u8>, JsError> {
     export::export_prg(&parse(song_json)?).map_err(|e| JsError::new(&format!("{e}")))
 }
 
+/// A SID-Wizard 1.x module for the song, as a C64 PRG file (`.swm.prg`). Fails with a readable message when the
+/// song is over SID-Wizard's limits.
+#[wasm_bindgen]
+pub fn export_swm(song_json: &str) -> Result<Vec<u8>, JsError> {
+    export::swm::export_swm(&parse(song_json)?).map(|x| x.to_prg()).map_err(|e| JsError::new(&format!("{e}")))
+}
+
+/// What `export_swm` could not represent, as a JSON array of sentences.
+#[wasm_bindgen]
+pub fn swm_export_notes(song_json: &str) -> Result<String, JsError> {
+    let x = export::swm::export_swm(&parse(song_json)?).map_err(|e| JsError::new(&format!("{e}")))?;
+    serde_json::to_string(&x.warnings).map_err(|e| JsError::new(&e.to_string()))
+}
+
 /// Realtime player driven from an AudioWorklet.
 #[wasm_bindgen]
 pub struct Player {

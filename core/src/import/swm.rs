@@ -173,7 +173,11 @@ pub fn import_swm(bytes: &[u8]) -> Result<SwmImport, SwmError> {
 
     // ---- song-level data
     let mut song = Song::new();
-    song.title = d[24..HEADER].iter().take_while(|&&b| b != 0).map(|&b| if (0x20..0x7F).contains(&b) { b as char } else { ' ' }).collect::<String>().trim().chars().take(31).collect();
+    // the author-info text is "AUTHOR:TITLE" by SID-Wizard's convention
+    let info: String = d[24..HEADER].iter().take_while(|&&b| b != 0).map(|&b| if (0x20..0x7F).contains(&b) { b as char } else { ' ' }).collect();
+    let (author, title) = info.split_once(':').unwrap_or(("", &info));
+    song.title = title.trim().chars().take(31).collect();
+    song.author = author.trim().chars().take(31).collect();
     let (t0, t1) = tempos[0];
     let speed = if t0 & 0x80 != 0 { (t0 & 0x7F) as u32 } else { (t0 as u32 + (t1 & 0x7F) as u32) / 2 };
     song.speed = speed.clamp(1, 31) as u8;
@@ -444,7 +448,10 @@ fn map_big_fx(fx: u8, val: u8) -> Option<(u8, u8)> {
     match fx {
         0x01 => Some((crate::model::fx::SLIDE_UP, val)),
         0x02 => Some((crate::model::fx::SLIDE_DOWN, val)),
-        0x08 => Some((crate::model::fx::VIBRATO, val)),
+        // SID-Wizard: amplitude in the high nibble, rate in the low; here speed is the high nibble and depth the low.
+        // Amplitude 0 is how a module stops vibrato.
+        0x08 if val >> 4 == 0 => Some((crate::model::fx::NONE, 0)),
+        0x08 => Some((crate::model::fx::VIBRATO, val.rotate_left(4))),
         0x0F => Some((crate::model::fx::FILTER_CUTOFF, val)),
         0x10 | 0x13 if val & 0x3F != 0 => Some((crate::model::fx::SET_SPEED, val & 0x3F)),
         _ => None,
@@ -558,11 +565,21 @@ fn convert_instrument(name: String, d: &[u8], w: &mut InstWarnings) -> Instrumen
 
     // ---- pulse program: "set" rows ($8x..$Fx xx) and "add" rows ($00..$7F cycles, xx delta)
     let mut start: Option<u16> = None;
-    let mut sweep: Option<(u8, i8)> = None;
+    let mut sweep: Option<(u32, i8)> = None;
+    let mut sweep_open = false; // the previous row was part of the first sweep
     let mut rows = 0;
     let mut i = pulse_ptr;
     while i + 1 < d.len() && d[i] != 0xFF && i < filter_ptr {
         let (b0, b1) = (d[i], d[i + 1]);
+        let continues = sweep_open && b0 < 0x80 && b1 as i8 == sweep.map_or(0, |s| s.1);
+        sweep_open = false;
+        if continues {
+            // a long sweep is split into rows of at most 127 frames
+            sweep = sweep.map(|(c, dl)| (c + b0 as u32, dl));
+            sweep_open = true;
+            i += 3;
+            continue;
+        }
         rows += 1;
         if b0 == 0xFE {
             // jump: keep what we have
@@ -571,7 +588,8 @@ fn convert_instrument(name: String, d: &[u8], w: &mut InstWarnings) -> Instrumen
                 start = Some((((b0 & 0x0F) as u16) << 8) | b1 as u16);
             }
         } else if sweep.is_none() {
-            sweep = Some((b0, b1 as i8));
+            sweep = Some((b0 as u32, b1 as i8));
+            sweep_open = true;
         }
         i += 3;
     }
@@ -581,7 +599,7 @@ fn convert_instrument(name: String, d: &[u8], w: &mut InstWarnings) -> Instrumen
     let pw0 = start.unwrap_or(0x800);
     ins.pulse_width = pw0;
     if let Some((cycles, delta)) = sweep.filter(|&(c, dl)| c > 0 && dl != 0) {
-        let end = (pw0 as i32 + cycles as i32 * delta as i32).clamp(0, 4095) as u16;
+        let end = (pw0 as i32 + cycles.min(4095) as i32 * delta as i32).clamp(0, 4095) as u16;
         ins.pulse_speed = delta;
         ins.pulse_min = pw0.min(end);
         ins.pulse_max = pw0.max(end);

@@ -15,6 +15,7 @@ Compose C64 music with a clearer interface and export real, C64-compatible `.sid
 - Project files (`.sidb`, JSON). Exported `.sid` / `.prg` files carry the project inside (after the music data) and open again for editing
 - **Import of SID-Wizard 1.x modules** (`.swm`, `.prg`, `.p00`): tested against all of SID-Wizard's own demo tunes (50+), which then export and play back identically in the 6502 player. Features this tracker lacks (filter programs, built-in vibrato, absolute-pitch arps, extra subtunes, tempo programs, chord speed) are approximated and listed in an import report
 
+- **Export to SID-Wizard** (`.swm.prg`): continue a tune in SID-Wizard 1.x; what it cannot hold is listed in a report
 Planned: more effects. MIDI keyboard input is implemented and tested with a simulated keyboard; it has not been tried with real hardware yet.
 
 See the **[user guide](docs/USER_GUIDE.md)**, the **[changelog](CHANGELOG.md)** and the **[releases](https://github.com/salleq/sidbloom/releases)**. Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md).

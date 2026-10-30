@@ -37,6 +37,8 @@ export type Action =
   | { t: "deselect" }
   | { t: "copy"; cut?: boolean }
   | { t: "paste" }
+  | { t: "copyTrack"; ch: number }
+  | { t: "pasteTrack"; ch: number }
   | { t: "selectAll" }
   | { t: "transpose"; d: number }
   | { t: "orderPos"; pos: number }
@@ -109,6 +111,23 @@ export function reducer(st: State, a: Action): State {
         Array.from({ length: r.row1 - r.row0 + 1 }, (_, j) => structuredClone(patternAt(st.song, r.ch0 + i, st.orderPos)?.rows[r.row0 + j] ?? emptyCell())));
       const next = { ...st, clip };
       return a.cut ? { ...reducer(next, { t: "clearCell", whole: true }), clip } : next;
+    }
+    case "copyTrack": {
+      const rows = patternAt(st.song, a.ch, st.orderPos)?.rows;
+      return rows ? { ...st, clip: [structuredClone(rows)] } : st;
+    }
+    case "pasteTrack": {
+      const src = st.clip?.[0];
+      if (!src || !patternAt(st.song, a.ch, st.orderPos)) return st;
+      const next = commit(st, (s) => {
+        const rows = patternAt(s, a.ch, st.orderPos)!.rows;
+        for (let j = 0; j < Math.min(src.length, rows.length); j++) {
+          const c = structuredClone(src[j]);
+          if (c.inst > s.instruments.length) c.inst = 0;
+          rows[j] = c;
+        }
+      });
+      return { ...next, sel: null };
     }
     case "selectAll": {
       const rows = rowsAt(st.song, st.orderPos);
@@ -235,31 +254,73 @@ export function useStore(initial: Song) {
   return useReducer(reducer, initial, initState);
 }
 
+function insertPage(s: Song, pos: number, make: (p: Song["patterns"][number]) => Song["patterns"][number]) {
+  const voices = [0, 1, 2].filter((c) => patternAt(s, c, pos));
+  if (!voices.length || s.patterns.length + voices.length > LIMITS.patterns) return;
+  for (const c of voices) {
+    s.patterns.push(make(patternAt(s, c, pos)!));
+    s.orders[c].splice(pos + 1, 0, s.patterns.length - 1);
+  }
+}
+
+/** Instrument numbers (1-based) that no pattern played in the song order uses. */
+export function unusedInstruments(s: Song): Set<number> {
+  const unused = new Set(s.instruments.map((_, i) => i + 1));
+  for (const idx of new Set(s.orders.flat())) for (const c of s.patterns[idx]?.rows ?? []) unused.delete(c.inst);
+  return unused;
+}
+
+/** Patterns that no order position refers to (in a linked song a whole combined pattern counts as used). */
+export function unusedPatternCount(s: Song): number {
+  const used = new Set(s.orders.flat().map((i) => (s.linked ? Math.floor(i / 3) : i)));
+  return s.patterns.filter((_, i) => !used.has(s.linked ? Math.floor(i / 3) : i)).length;
+}
+
+function dropInstruments(s: Song, drop: Set<number>) {
+  const map = (n: number) => (n === 0 || drop.has(n) ? 0 : n - [...drop].filter((d) => d < n).length);
+  for (const p of s.patterns) for (const c of p.rows) c.inst = map(c.inst);
+  s.instruments = s.instruments.filter((_, i) => !drop.has(i + 1));
+}
+
+function compactPatterns(s: Song) {
+  const used = new Set(s.orders.flat().map((i) => (s.linked ? Math.floor(i / 3) : i)));
+  const remap = new Map<number, number>();
+  const patterns: Song["patterns"] = [];
+  s.patterns.forEach((p, i) => {
+    if (!used.has(s.linked ? Math.floor(i / 3) : i)) return;
+    remap.set(i, patterns.length);
+    patterns.push(p);
+  });
+  if (patterns.length === s.patterns.length) return;
+  s.patterns = patterns;
+  for (let c = 0; c < CHANNELS; c++) s.orders[c] = s.orders[c].map((i) => remap.get(i) ?? 0);
+}
+
 // ---- song-level edit helpers (used with {t:"edit"}) ----
 export const edits = {
-  newPatternFor: (ch: number, pos: number) => (s: Song) => {
-    const len = patternAt(s, ch, pos)?.rows.length ?? 32;
-    if (s.linked) {
-      if (s.patterns.length + 3 > LIMITS.patterns) return;
-      const n = groupCount(s);
-      for (let c = 0; c < CHANNELS; c++) { s.patterns.push(emptyPattern(len)); s.orders[c][pos] = 3 * n + c; }
-      return;
+  /** Inserts a new position after `pos` with an empty pattern for every voice (the song order gets a new page). */
+  newPage: (pos: number) => (s: Song) => insertPage(s, pos, (p) => emptyPattern(p.rows.length)),
+  /** Inserts a new position after `pos` holding copies of that position's patterns. */
+  duplicatePage: (pos: number) => (s: Song) => insertPage(s, pos, (p) => structuredClone(p)),
+  /** Empties the patterns at `pos`: all voices when linked, else only voice `ch`. */
+  clearPattern: (ch: number, pos: number) => (s: Song) => {
+    for (const c of s.linked ? [0, 1, 2] : [ch]) {
+      const p = patternAt(s, c, pos);
+      if (p) p.rows = p.rows.map(emptyCell);
     }
-    if (s.patterns.length >= LIMITS.patterns) return;
-    s.patterns.push(emptyPattern(len));
-    s.orders[ch][pos] = s.patterns.length - 1;
   },
-  duplicatePatternFor: (ch: number, pos: number) => (s: Song) => {
-    if (s.linked) {
-      if (s.patterns.length + 3 > LIMITS.patterns) return;
-      const n = groupCount(s), g = groupAt(s, pos);
-      for (let c = 0; c < CHANNELS; c++) { s.patterns.push(structuredClone(s.patterns[3 * g + c])); s.orders[c][pos] = 3 * n + c; }
-      return;
-    }
-    const src = patternAt(s, ch, pos);
-    if (!src || s.patterns.length >= LIMITS.patterns) return;
-    s.patterns.push(structuredClone(src));
-    s.orders[ch][pos] = s.patterns.length - 1;
+  /** Drops patterns no position refers to, and renumbers the rest. */
+  removeUnusedPatterns: () => (s: Song) => compactPatterns(s),
+  /** Deletes an instrument; rows that played it become empty-instrument rows and later numbers shift down. */
+  removeInstrument: (i: number) => (s: Song) => {
+    if (s.instruments.length <= 1 || !s.instruments[i]) return;
+    dropInstruments(s, new Set([i + 1]));
+  },
+  /** Deletes the instruments no pattern in the song uses (at least one instrument stays). */
+  removeUnusedInstruments: () => (s: Song) => {
+    const unused = unusedInstruments(s);
+    if (unused.size >= s.instruments.length) unused.delete(1);
+    if (unused.size) dropInstruments(s, unused);
   },
   bumpPattern: (ch: number, pos: number, d: number) => (s: Song) => {
     if (s.linked) {
@@ -277,6 +338,7 @@ export const edits = {
   deleteOrder: (pos: number) => (s: Song) => {
     if (orderLength(s) <= 1) return;
     for (let ch = 0; ch < CHANNELS; ch++) if (s.orders[ch].length > 1) s.orders[ch].splice(pos, 1);
+    compactPatterns(s);
   },
   setPatternLength: (ch: number, pos: number, len: number) => (s: Song) => {
     len = clamp(len, 1, LIMITS.rows);

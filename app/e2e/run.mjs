@@ -30,6 +30,7 @@ try {
   await page.goto(url);
   await page.waitForSelector("[data-testid=tracker]");
   const step = (s) => console.log("✓", s);
+  const hexs = (n) => n.toString(16).toUpperCase().padStart(2, "0");
 
   // demo song is loaded: first row of voice 1 has A-4
   assert.match(await page.locator(".trow").first().innerText(), /A-4/);
@@ -94,12 +95,15 @@ try {
   // linked patterns (the demo is linked): one pattern number covers all voices
   const panelBtn = (n) => page.locator(".panel").getByRole("button", { name: n, exact: true });
   assert.equal((await page.locator(".order-row").first().innerText()).replace(/\s+/g, " ").trim(), "00 00", "one pattern number per position");
+  const positions = await page.locator(".order-row").count();
   await panelBtn("New").click();
   assert.deepEqual(await page.locator(".pat-id").allInnerTexts(), ["pattern 01", "pattern 01", "pattern 01"]);
   assert.equal(await page.locator(".tcell .f.note:not(.empty)").count(), 0, "new combined pattern is empty in all voices");
+  assert.equal(await page.locator(".order-row").count(), positions + 1, "New adds a position");
+  assert.equal((await page.locator(".order-row.sel").innerText()).slice(0, 2), "01", "and moves onto it");
   await panelBtn("Duplicate").click();
-  await page.getByLabel("Previous pattern").click();
-  await page.getByLabel("Previous pattern").click();
+  assert.equal(await page.locator(".order-row").count(), positions + 2, "Duplicate adds a position too");
+  await page.locator(".order-row").first().click();
   assert.deepEqual(await page.locator(".pat-id").allInnerTexts(), ["pattern 00", "pattern 00", "pattern 00"]);
   assert.match(await page.locator(".trow").first().innerText(), /A-4/);
   await page.getByLabel("Rows").fill("16");
@@ -121,6 +125,35 @@ try {
   assert.match(await page.locator(".trow").first().innerText(), /A-5/, `${rowBefore} transposed`);
   await page.keyboard.press("Control+z");
   step("linked patterns: new / duplicate / rows act on all voices, toggle is lossless, select all + transpose");
+
+  // song order housekeeping: duplicate copies the music, delete drops the patterns only it used, clear empties
+  await page.locator(".order-row").first().click();
+  await panelBtn("Duplicate").click();
+  assert.match(await page.locator(".trow").first().innerText(), /A-4/, "the duplicate holds a copy of the music");
+  assert.equal(await page.locator(".order-row").count(), positions + 3);
+  await panelBtn("Clear").click();
+  assert.equal(await page.locator(".tcell .f.note:not(.empty)").count(), 0, "Clear empties the pattern");
+  await page.getByRole("button", { name: "− Position" }).click();
+  assert.equal(await page.locator(".order-row").count(), positions + 2);
+  await page.locator(".order-row").first().click();
+  assert.match(await page.locator(".trow").first().innerText(), /A-4/, "the first pattern is untouched");
+  await panelBtn("New").click();
+  await page.getByLabel("Previous pattern").click(); // the new pattern is no longer in the song
+  await page.getByRole("button", { name: /Remove unused/ }).click();
+  assert.equal(await page.getByRole("button", { name: /Remove unused/ }).isDisabled(), true, "nothing left to remove");
+  step("song order: new / duplicate add a position, delete and clear, remove unused patterns");
+
+  // whole-track copy and paste, no selecting
+  await page.locator(".order-row").first().click();
+  const voice1 = (await page.locator(".trow").first().locator(".tcell").first().innerText()).replace(/\s+/g, "");
+  await page.getByTestId("copy-track-0").click();
+  await page.locator(".order-row").nth(1).click();
+  await page.getByTestId("paste-track-2").click();
+  const row0 = (await page.locator(".trow").first().locator(".tcell").allInnerTexts()).map((t) => t.replace(/\s+/g, ""));
+  assert.equal(row0[2], voice1, "voice 1 of position 0 pasted onto voice 3 of the next position");
+  await page.keyboard.press("Control+z");
+  await page.locator(".order-row").first().click();
+  step("copy / paste a whole track");
 
   // playback runs in an AudioWorklet and reports positions; output must be audible
   await page.getByTestId("play").click();
@@ -175,6 +208,17 @@ try {
   await page.waitForTimeout(300);
   assert.match(dialogText, /no SIDbloom project/);
   step("foreign .sid is rejected with an explanation");
+
+  // export for SID-Wizard: a C64 PRG (load address $3333) holding an SWM1 module, which the importer reads back
+  const [sw] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-swm").click()]);
+  const swb = readFileSync(await sw.path());
+  assert.ok(sw.suggestedFilename().endsWith(".swm.prg"), sw.suggestedFilename());
+  assert.equal(swb.subarray(0, 6).toString("latin1"), "\x33\x33SWM1");
+  const [fcw] = await Promise.all([page.waitForEvent("filechooser"), page.getByTestId("import-swm").click()]);
+  await fcw.setFiles({ name: sw.suggestedFilename(), mimeType: "application/octet-stream", buffer: swb });
+  await page.waitForFunction(() => document.querySelector("[data-testid=status]")?.textContent?.startsWith("Imported"));
+  assert.match(await page.locator(".trow").first().innerText(), /A-4/);
+  step("song exported for SID-Wizard and imported again");
 
   // import a SID-Wizard module (a tiny hand-built SWM1 file)
   const hdr = Buffer.alloc(64);
@@ -384,6 +428,30 @@ try {
   await page.keyboard.press("Space");
   await page.waitForFunction(() => !document.querySelector(".order-row.playing"));
   step("double-click plays a pattern; Shift+Space plays the song");
+
+  // the song from the current pattern, not from the start
+  await page.getByTestId("tab-song").click();
+  await page.locator(".order-row").nth(1).click();
+  await page.getByTestId("play-from-pattern").click();
+  await page.waitForFunction(() => document.querySelectorAll(".order-row")[1]?.classList.contains("playing"));
+  assert.equal(await page.locator(".order-row.playing").count(), 1);
+  await page.getByTestId("play").click(); // stop
+  await page.waitForFunction(() => !document.querySelector(".order-row.playing"));
+  step("play the song from the current pattern");
+
+  // instruments can be deleted, and unused ones removed in one go
+  await page.getByTestId("tab-inst").click();
+  const instCount = () => page.getByLabel("Instrument", { exact: true }).locator("option").count();
+  const n0 = await instCount();
+  await page.getByTitle("New instrument", { exact: true }).click();
+  await page.getByTitle("New instrument", { exact: true }).click();
+  assert.equal(await instCount(), n0 + 2);
+  await page.getByTestId("delete-instrument").click();
+  assert.equal(await instCount(), n0 + 1, "delete removes the selected instrument");
+  await page.getByTestId("remove-unused-instruments").click();
+  assert.equal(await page.getByTestId("remove-unused-instruments").isDisabled(), true, "no unused instruments left");
+  assert.ok((await instCount()) >= 1 && (await instCount()) <= n0, "unused instruments are gone");
+  step("delete instrument, remove unused instruments");
 
   // the side panels are tabs: one at a time, and the choice is remembered
   await page.getByTestId("tab-filter").click();

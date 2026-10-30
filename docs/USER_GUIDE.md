@@ -34,6 +34,7 @@ and export real `.sid` files that play on a C64 or in any SID player.
 | `-` `=` | Previous / next instrument |
 | Drag with the mouse, or Shift+arrows | Select cells (several rows and voices) |
 | Ctrl+C / Ctrl+X / Ctrl+V | Copy, cut, paste the selection at the cursor (a single cell when nothing is selected); Del clears the selection |
+| **Copy** / **Paste** in a voice header | Copy a whole voice of the current pattern, and replace another voice (in this or any other pattern) with it; no selecting needed |
 | Ctrl+Z / Ctrl+Y | Undo / redo (200 steps) |
 | Ctrl+S / Ctrl+Shift+S / Ctrl+O | Save (overwrites the current file) / save as / open a `.sidb` project |
 
@@ -49,9 +50,15 @@ Middle C (MIDI 60) is C-4. Notes outside C-0 … B-7 are ignored; velocity is ig
 keyboard only sounds. On macOS the first start may ask for permission to use MIDI devices.
 
 ## 4. Song order
-A song is a list of *positions*. Use **+ Position / − Position** to extend the song, ◀ ▶ to pick a different pattern at the
-current position, **New** / **Duplicate** to make patterns, and **Rows** to change a pattern's length (1–64). Playback
-loops when every voice reaches the end of its list.
+A song is a list of *positions*. Use **+ Position / − Position** to extend the song (+ Position repeats the current patterns;
+− Position also deletes the patterns only it used), ◀ ▶ to pick a different pattern at the current position, and **Rows** to
+change a pattern's length (1–64). **New** and **Duplicate** add a position after the current one, holding an empty pattern or a
+copy of the current pattern, and move onto it. **Clear** empties the current pattern. **Remove unused** deletes the patterns that
+no position refers to (they pile up when you pick other patterns with ◀ ▶). Playback loops when every voice reaches the end of
+its list.
+
+**▶ Pattern** (Space) loops the current pattern, **▶ Song** plays the song from the start, **▶ From pattern**
+(Shift+Enter) plays the song starting at the current pattern, and **▶ From cursor** (Enter) starts at the cursor row.
 
 **Linked patterns** (the checkbox in the order panel; on for new songs) work like a `.mod` tracker: one pattern number
 covers all three voices, so **New**, **Duplicate**, ◀ ▶ and **Rows** act on every voice at once. Together with
@@ -73,6 +80,8 @@ Songs imported from SID-Wizard or MIDI start unlinked.
   Sync modifiers) and a semitone offset. Use it for drum hits (noise → pulse with falling pitch) or fast arpeggios.
   ↺ makes the table loop back to a step; without it the last step is held.
 - **Chord:** if set, the instrument steps through that chord's notes, one per frame (see below).
+- **✕** deletes the selected instrument: rows that used it lose their instrument, and later instruments move down one number.
+  **Remove unused** deletes every instrument no pattern uses.
 - **♪ Test** plays the instrument.
 - **Add from library…** adds a ready-made instrument: drums (kick, snares, clap, hihats, tom, crash, ride), basses, leads, a
   pad and arpeggio chords. Drums sound best at the pitch they were made for (kicks around C-2, snares around C-3, hihats high up),
@@ -119,6 +128,15 @@ The SID has one filter shared by all voices. Choose which voices go through it, 
   for each of the three voices; the busiest three are preselected. A SID voice plays one note at a time, so chords are reduced
   to their highest note, the drum channel becomes a noise instrument, and timing is rounded to four rows per beat. Only the first
   tempo is used. What was changed is listed in the report above the editor.
+- **SW .swm:** exports a SID-Wizard 1.x module, saved as a C64 PRG (`name.swm.prg`, load address `$3333`) like SID-Wizard
+  itself saves them, so you can carry on with the tune in SID-Wizard. Notes, instruments (waveform table, pulse sweep,
+  envelope, chord), chords, the three orderlists, slide, vibrato, chord, filter cutoff / resonance / mode and speed effects
+  and the speed carry over. The song's filter setting becomes a filter program in the instruments of the voices that go through
+  it. What SID-Wizard cannot hold (arpeggio effect 0xy, filter sweep Bxx, the *Released* text, NTSC) is left out and listed in a
+  report above the editor; a song over SID-Wizard's limits (62 instruments, 127 different patterns, 126 positions per voice)
+  is refused with the reason. Patterns that are too dense for SID-Wizard are split in two. The module was checked by reading it
+  back with this program's SID-Wizard importer, including 78 module files from SID-Wizard's own demo tunes, but it has not been opened
+  in the real SID-Wizard.
 - **Import SW…:** opens a SID-Wizard 1.x module (`.swm`, or `.prg` / `.p00` of one). Anything this tracker cannot
   represent is approximated and listed in a report above the editor.
 

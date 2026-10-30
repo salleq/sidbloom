@@ -68,6 +68,8 @@ input[type="number"] { width: 64px; }
 .tracker-head, .trow { display: grid; grid-template-columns: 44px repeat(3, minmax(150px, 1fr)); }
 .tracker-head { background: var(--panel2); border-bottom: 1px solid var(--line); }
 .chan-head { padding: 8px 12px; font-family: var(--sans); font-weight: 600; display: flex; justify-content: space-between; border-left: 1px solid var(--line); }
+.track-btns { display: flex; gap: 4px; }
+.track-btns .mini { font-size: 11px; padding: 1px 6px; }
 .pat-id { color: var(--muted); font-weight: 400; font-size: 12px; }
 .tracker-body { overflow-y: auto; flex: 1; }
 .trow { height: 24px; line-height: 24px; }
