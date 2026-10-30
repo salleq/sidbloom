@@ -3,7 +3,8 @@ import {
 } from "../model";
 import { LIBRARY, type Preset } from "../library";
 import { instrumentFile, pickInstrument, saveFile } from "../files";
-import { edits, unusedInstruments, unusedPatternCount, type Action } from "../store";
+import { useState } from "react";
+import { edits, unusedInstruments, unusedPatternCount, type Action, type InstrumentClip, type InstrumentParts } from "../store";
 import { EnvelopeEditor, FilterPad, Knob } from "./Controls";
 
 type D = (a: Action) => void;
@@ -70,8 +71,9 @@ export function OrderPanel({ song, orderPos, ch, dispatch, playOrder, onPlay }: 
 }
 
 /* ---------- instrument editor ---------- */
-export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Song; inst: number; dispatch: D; onPreview: (note?: number) => void }) {
+export function InstrumentPanel({ song, inst, clip, dispatch, onPreview }: { song: Song; inst: number; clip: InstrumentClip | null; dispatch: D; onPreview: (note?: number) => void }) {
   const i = inst - 1;
+  const [parts, setParts] = useState<InstrumentParts>({ adsr: true, wave: false, pulse: false, chord: false });
   const ins = song.instruments[i];
   const upd = (fn: (x: Instrument) => void, key = "") => dispatch({ t: "edit", fn: edits.updateInstrument(i, fn), coalesce: key ? `inst${i}:${key}` : undefined });
   if (!ins) return null;
@@ -113,6 +115,15 @@ export function InstrumentPanel({ song, inst, dispatch, onPreview }: { song: Son
         <button disabled={full} title="Add an instrument from a .sidi file" data-testid="import-instrument"
           onClick={() => void pickInstrument().then((r) => r && addFrom(r.instrument, r.chord))}>Import</button>
         <button title="Save this instrument as a .sidi file" onClick={() => void exportInst()} data-testid="export-instrument">Export</button>
+      </div>
+      <div className="btn-row" title="Copy this instrument, then paste only the parts you choose into another one">
+        <button onClick={() => dispatch({ t: "copyInstrument", i })} data-testid="copy-instrument">Copy</button>
+        {([["adsr", "ADSR"], ["wave", "Waveform"], ["pulse", "Pulse"], ["chord", "Chord"]] as const).map(([k, label]) => (
+          <label key={k} className="chip"><input type="checkbox" checked={parts[k]} onChange={() => setParts({ ...parts, [k]: !parts[k] })} /><span>{label}</span></label>
+        ))}
+        <button disabled={!clip || !Object.values(parts).some(Boolean)} data-testid="paste-instrument"
+          title={clip ? `Replace the ticked parts of this instrument with those of ${clip.instrument.name}` : "Copy an instrument first"}
+          onClick={() => clip && dispatch({ t: "edit", fn: edits.pasteInstrumentParts(i, clip, parts) })}>Paste{clip ? ` from ${clip.instrument.name.trim() || "copy"}` : ""}</button>
       </div>
       <div className="btn-row">
         <button disabled={!unusedCount} onClick={() => dispatch({ t: "edit", fn: edits.removeUnusedInstruments() })} title="Delete the instruments no pattern uses" data-testid="remove-unused-instruments">

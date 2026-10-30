@@ -80,6 +80,10 @@ Songs imported from SID-Wizard or MIDI start unlinked.
   Sync modifiers) and a semitone offset. Use it for drum hits (noise → pulse with falling pitch) or fast arpeggios.
   ↺ makes the table loop back to a step; without it the last step is held.
 - **Chord:** if set, the instrument steps through that chord's notes, one per frame (see below).
+- **Copy / Paste** (above the name): **Copy** remembers the selected instrument. Tick the parts to take over (**ADSR**,
+  **Waveform** table with its loop, **Pulse** settings, **Chord**; ADSR is ticked by default), select another instrument and
+  press **Paste**: only the ticked parts are replaced, so a minor-chord instrument can get the envelope of a major one
+  while keeping its own chord.
 - **✕** deletes the selected instrument: rows that used it lose their instrument, and later instruments move down one number.
   **Remove unused** deletes every instrument no pattern uses.
 - **♪ Test** plays the instrument.
@@ -129,7 +133,7 @@ The SID has one filter shared by all voices. Choose which voices go through it, 
   to their highest note, the drum channel becomes a noise instrument, and timing is rounded to four rows per beat. Only the first
   tempo is used. What was changed is listed in the report above the editor.
 - **SW .swm:** exports a SID-Wizard 1.x module, saved as a C64 PRG (`name.swm.prg`, load address `$3333`) like SID-Wizard
-  itself saves them, so you can carry on with the tune in SID-Wizard. Notes, instruments (waveform table, pulse sweep,
+  itself saves them (the file name is cut to 12 characters, because SID-Wizard shows short names only), so you can carry on with the tune in SID-Wizard. Notes, instruments (waveform table, pulse sweep,
   envelope, chord), chords, the three orderlists, slide, vibrato, chord, filter cutoff / resonance / mode and speed effects
   and the speed carry over. The song's filter setting becomes a filter program in the instruments of the voices that go through
   it. What SID-Wizard cannot hold (arpeggio effect 0xy, filter sweep Bxx, the *Released* text, NTSC) is left out and listed in a

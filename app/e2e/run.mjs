@@ -453,6 +453,22 @@ try {
   assert.ok((await instCount()) >= 1 && (await instCount()) <= n0, "unused instruments are gone");
   step("delete instrument, remove unused instruments");
 
+  // copy an instrument and paste only its envelope into another: the name and other parts stay
+  const knobs = async () => Promise.all(["Attack", "Decay", "Sustain", "Release"].map((k) => page.getByRole("slider", { name: k, exact: true }).getAttribute("aria-valuenow")));
+  await page.getByLabel("Instrument library").selectOption("0"); // a preset with its own envelope
+  await page.waitForTimeout(100);
+  const presetName = await page.getByLabel("Name").inputValue();
+  const presetKnobs = await knobs();
+  await page.getByTestId("copy-instrument").click();
+  await page.getByTitle("New instrument", { exact: true }).click();
+  const plainName = await page.getByLabel("Name").inputValue();
+  assert.notDeepEqual(await knobs(), presetKnobs, "the new instrument has another envelope");
+  await page.getByTestId("paste-instrument").click(); // ADSR is ticked by default
+  assert.deepEqual(await knobs(), presetKnobs, "the envelope was pasted");
+  assert.equal(await page.getByLabel("Name").inputValue(), plainName, `the name stays (not ${presetName})`);
+  await page.getByTestId("paste-instrument").click();
+  step("copy an instrument, paste only chosen parts");
+
   // the side panels are tabs: one at a time, and the choice is remembered
   await page.getByTestId("tab-filter").click();
   assert.equal(await page.locator(".tab-body .panel").count(), 1);

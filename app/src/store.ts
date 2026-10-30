@@ -5,6 +5,10 @@ import {
   type Cell, type Chord, type Instrument, type Song,
 } from "./model";
 
+export interface InstrumentClip { instrument: Instrument; chord?: Chord }
+/** Which parts of a copied instrument a paste replaces. */
+export interface InstrumentParts { adsr: boolean; wave: boolean; pulse: boolean; chord: boolean }
+
 export interface Cursor { ch: number; row: number; field: number } // field 0 note,1-2 inst,3 fx,4-5 param
 
 export interface Sel { ch: number; row: number } // anchor; the selection spans anchor..cursor
@@ -17,6 +21,7 @@ export interface State {
   cursor: Cursor;
   sel: Sel | null;
   clip: Cell[][] | null; // clip[ch][row], copied cells
+  instClip: InstrumentClip | null; // a copied instrument, parts of which can be pasted into another
   orderPos: number;
   octave: number;
   curInst: number; // 1-based
@@ -37,6 +42,7 @@ export type Action =
   | { t: "deselect" }
   | { t: "copy"; cut?: boolean }
   | { t: "paste" }
+  | { t: "copyInstrument"; i: number }
   | { t: "copyTrack"; ch: number }
   | { t: "pasteTrack"; ch: number }
   | { t: "selectAll" }
@@ -53,7 +59,7 @@ export type Action =
   | { t: "edit"; fn: (s: Song) => void; coalesce?: string };
 
 export function initState(song: Song): State {
-  return { song, past: [], future: [], cursor: { ch: 0, row: 0, field: 0 }, sel: null, clip: null, orderPos: 0, octave: 4, curInst: 1, step: 1, sid8580: true, fileName: "untitled.sidb", dirty: false };
+  return { song, past: [], future: [], cursor: { ch: 0, row: 0, field: 0 }, sel: null, clip: null, instClip: null, orderPos: 0, octave: 4, curInst: 1, step: 1, sid8580: true, fileName: "untitled.sidb", dirty: false };
 }
 
 const clone = <T,>(v: T): T => structuredClone(v);
@@ -88,7 +94,7 @@ function advance(st: State): State {
 export function reducer(st: State, a: Action): State {
   switch (a.t) {
     case "load":
-      return { ...initState(a.song), fileName: a.fileName ?? "untitled.sidb", sid8580: st.sid8580, octave: st.octave, clip: st.clip };
+      return { ...initState(a.song), fileName: a.fileName ?? "untitled.sidb", sid8580: st.sid8580, octave: st.octave, clip: st.clip, instClip: st.instClip };
     case "saved": return { ...st, fileName: a.fileName, dirty: false };
     case "undo": {
       if (!st.past.length) return st;
@@ -111,6 +117,12 @@ export function reducer(st: State, a: Action): State {
         Array.from({ length: r.row1 - r.row0 + 1 }, (_, j) => structuredClone(patternAt(st.song, r.ch0 + i, st.orderPos)?.rows[r.row0 + j] ?? emptyCell())));
       const next = { ...st, clip };
       return a.cut ? { ...reducer(next, { t: "clearCell", whole: true }), clip } : next;
+    }
+    case "copyInstrument": {
+      const instrument = st.song.instruments[a.i];
+      if (!instrument) return st;
+      const chord = instrument.default_chord ? st.song.chords[instrument.default_chord - 1] : undefined;
+      return { ...st, instClip: structuredClone({ instrument, chord }) };
     }
     case "copyTrack": {
       const rows = patternAt(st.song, a.ch, st.orderPos)?.rows;
@@ -254,6 +266,13 @@ export function useStore(initial: Song) {
   return useReducer(reducer, initial, initState);
 }
 
+/** 1-based number of a chord in the song, added when it is not there yet (0: no room). */
+function chordIndex(s: Song, chord: Chord): number {
+  let i = s.chords.findIndex((c) => c.hold === chord.hold && c.notes.join() === chord.notes.join());
+  if (i < 0 && s.chords.length < LIMITS.chords) { s.chords.push(structuredClone(chord)); i = s.chords.length - 1; }
+  return i + 1;
+}
+
 function insertPage(s: Song, pos: number, make: (p: Song["patterns"][number]) => Song["patterns"][number]) {
   const voices = [0, 1, 2].filter((c) => patternAt(s, c, pos));
   if (!voices.length || s.patterns.length + voices.length > LIMITS.patterns) return;
@@ -375,13 +394,17 @@ export const edits = {
   addInstrumentFrom: (inst: Instrument, chord?: Chord) => (s: Song) => {
     if (s.instruments.length >= LIMITS.instruments) return;
     const x = structuredClone(inst);
-    x.default_chord = 0;
-    if (chord) {
-      let i = s.chords.findIndex((c) => c.hold === chord.hold && c.notes.join() === chord.notes.join());
-      if (i < 0 && s.chords.length < LIMITS.chords) { s.chords.push(structuredClone(chord)); i = s.chords.length - 1; }
-      if (i >= 0) x.default_chord = i + 1;
-    }
+    x.default_chord = chord ? chordIndex(s, chord) : 0;
     s.instruments.push(x);
+  },
+  /** Replaces the chosen parts of instrument `i` with those of a copied instrument; the other parts stay. */
+  pasteInstrumentParts: (i: number, clip: InstrumentClip, parts: InstrumentParts) => (s: Song) => {
+    const x = s.instruments[i], src = clip.instrument;
+    if (!x) return;
+    if (parts.adsr) { x.attack_decay = src.attack_decay; x.sustain_release = src.sustain_release; }
+    if (parts.wave) { x.wave_table = structuredClone(src.wave_table); x.wave_loop = src.wave_loop; }
+    if (parts.pulse) { x.pulse_width = src.pulse_width; x.pulse_speed = src.pulse_speed; x.pulse_min = src.pulse_min; x.pulse_max = src.pulse_max; }
+    if (parts.chord) x.default_chord = clip.chord ? chordIndex(s, clip.chord) : 0;
   },
   addInstrument: () => (s: Song) => {
     if (s.instruments.length >= LIMITS.instruments) return;
