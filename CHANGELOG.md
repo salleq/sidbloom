@@ -6,6 +6,11 @@ All notable changes to SIDbloom are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-10-31
+
+### Added
+- **Export to MP3** (`.mp3` button): the song is rendered once through (to the point where it would loop, with a short fade-out) using the chosen SID chip, and saved as a mono 128 kbit/s MP3. Uses the LGPL-licensed lamejs encoder.
+
 ## [0.4.1] — 2026-10-30
 
 ### Added

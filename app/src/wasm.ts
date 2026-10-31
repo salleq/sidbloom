@@ -17,6 +17,8 @@ export const newSong = (): Song => {
 export const validate = (s: Song) => w.validate(JSON.stringify(s));
 export const exportSid = (s: Song, is8580: boolean) => w.export_sid(JSON.stringify(s), is8580);
 export const exportPrg = (s: Song) => w.export_prg(JSON.stringify(s));
+/** The song played once through (to where it would loop) as mono 16-bit PCM at 44.1 kHz. */
+export const renderSong = (s: Song, is8580: boolean, maxSeconds: number): Int16Array => w.render_song(JSON.stringify(s), is8580, maxSeconds);
 export const exportSwm = (s: Song) => w.export_swm(JSON.stringify(s));
 export const swmExportNotes = (s: Song): string[] => JSON.parse(w.swm_export_notes(JSON.stringify(s)));
 export const importSwm = (bytes: Uint8Array): { song: Song; warnings: string[] } => JSON.parse(w.import_swm(bytes));

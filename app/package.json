@@ -1,7 +1,7 @@
 {
   "name": "sidbloom-app",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.5.0",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
@@ -14,6 +14,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2.8.4",
     "@tauri-apps/plugin-fs": "^2.7.1",

@@ -8,7 +8,8 @@ import { confirmDiscard, openProject, pickMidi, pickSwm, saveFile, saveProject, 
 import { MidiDialog } from "./components/MidiDialog";
 import { NOTE_OFF, hex, noteFromKey, patternLoop, silenced, type Song } from "./model";
 import { selRect, useStore } from "./store";
-import { exportPrg, exportSid, exportSwm, importMidi, importSwm, midiParts, swmExportNotes, newSong, projectFits, validate, type MidiPart } from "./wasm";
+import { encodeMp3 } from "./mp3";
+import { exportPrg, exportSid, renderSong, exportSwm, importMidi, importSwm, midiParts, swmExportNotes, newSong, projectFits, validate, type MidiPart } from "./wasm";
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA") && (t as HTMLInputElement).type !== "checkbox" && (t as HTMLInputElement).type !== "range";
@@ -275,6 +276,24 @@ export function App({ initial }: { initial: Song }) {
     }
   }, []);
 
+  const doExportMp3 = useCallback(async () => {
+    const s = stateRef.current;
+    const MAX = 600; // seconds
+    try {
+      setMessage("Rendering MP3…");
+      await new Promise((r) => setTimeout(r, 30)); // let the message show before the work starts
+      const pcm = renderSong(s.song, s.sid8580, MAX);
+      const bytes = await encodeMp3(pcm);
+      const name = `${slug(s.song.title)}.mp3`;
+      const cut = pcm.length >= MAX * 44100;
+      if (await saveFile(name, bytes, "mp3")) {
+        setMessage(`Exported ${name} (${(pcm.length / 44100).toFixed(1)} s, ${(bytes.length / 1024).toFixed(0)} KiB)${cut ? " — cut off at 10 minutes" : ""}`);
+      } else setMessage("");
+    } catch (e) {
+      setMessage(`Cannot export MP3: ${e instanceof Error ? e.message : e}`);
+    }
+  }, []);
+
   const doExport = useCallback(async (kind: "sid" | "prg") => {
     const s = stateRef.current;
     const err = validate(s.song);
@@ -404,6 +423,7 @@ export function App({ initial }: { initial: Song }) {
         <div className="group right">
           <button onClick={() => void doExport("sid")} className="accent" data-testid="export-sid">Export .sid</button>
           <button onClick={() => void doExport("prg")}>.prg</button>
+          <button onClick={() => void doExportMp3()} title="Render the song once through to an MP3 audio file (with the chosen SID chip)" data-testid="export-mp3">.mp3</button>
           <button onClick={() => void doExportSwm()} title="Export a SID-Wizard 1.x module (.swm.prg) to continue the tune in SID-Wizard" data-testid="export-swm">SW .swm</button>
           <button onClick={() => setTheme(theme === "dark" ? "light" : theme === "light" ? "auto" : "dark")} title="Theme" aria-label="Toggle theme">◑ {theme}</button>
         </div>

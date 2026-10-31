@@ -34,6 +34,55 @@ pub fn render_pcm(song: &Song, seconds: f64, model: ChipModel) -> Vec<i16> {
     pcm
 }
 
+/// Renders the song once through, from the start until every voice has reached the end of its order list (the
+/// point where playback would loop), or `max_seconds`, whichever comes first. The last half second keeps sounding
+/// and fades out. Returns mono 16-bit audio at `SAMPLE_RATE` and whether the song's end was reached.
+pub fn render_song_pcm(song: &Song, model: ChipModel, max_seconds: f64) -> (Vec<i16>, bool) {
+    const FADE: usize = SAMPLE_RATE as usize / 2;
+    let clock = song.clock_hz();
+    let cycles_per_frame = (clock / song.frame_hz()).round() as u32;
+    let max_frames = (max_seconds * song.frame_hz()).ceil() as usize;
+
+    let mut sid = Sid::new(model);
+    sid.set_sampling_parameters(SamplingMethod::ResampleFast, clock as u32, SAMPLE_RATE);
+    let mut engine = Engine::new(song.clone());
+    let mut pcm: Vec<i16> = Vec::new();
+    let mut buf = [0i16; 2048];
+    let mut sample_cycles = |sid: &mut Sid, pcm: &mut Vec<i16>| {
+        let mut delta = cycles_per_frame;
+        while delta > 0 {
+            let (n, rest) = sid.sample(delta, &mut buf, 1);
+            pcm.extend_from_slice(&buf[..n]);
+            delta = rest;
+        }
+    };
+    let mut ended = false;
+    for _ in 0..max_frames {
+        let writes = engine.tick();
+        if engine.looped() {
+            ended = true; // this frame already belongs to the second round: drop it
+            break;
+        }
+        for (reg, val) in writes {
+            sid.write(reg, val);
+        }
+        sample_cycles(&mut sid, &mut pcm);
+    }
+    if ended {
+        // let the last notes ring out (no new register writes) and fade
+        let start = pcm.len();
+        while pcm.len() < start + FADE {
+            sample_cycles(&mut sid, &mut pcm);
+        }
+        pcm.truncate(start + FADE);
+        for i in 0..FADE {
+            let g = 1.0 - i as f32 / FADE as f32;
+            pcm[start + i] = (pcm[start + i] as f32 * g) as i16;
+        }
+    }
+    (pcm, ended)
+}
+
 /// Pull-based realtime renderer: call `fill` from an audio callback / worklet.
 pub struct Renderer {
     engine: Engine,
@@ -163,6 +212,20 @@ pub fn render_wav(song: &Song, seconds: f64, model: ChipModel) -> Vec<u8> {
 mod tests {
     use super::*;
     use crate::model::*;
+
+    #[test]
+    fn song_render_stops_at_the_end_of_the_song() {
+        let song = single_voice_song(58, 0x10);
+        let (pcm, ended) = render_song_pcm(&song, ChipModel::Mos8580, 60.0);
+        assert!(ended);
+        // one 64-row pattern at speed 6 on a 50 Hz machine is 7.68 s, plus the half second fade
+        let secs = pcm.len() as f64 / SAMPLE_RATE as f64;
+        assert!((secs - (64.0 * 6.0 / song.frame_hz() + 0.5)).abs() < 0.1, "length {secs}");
+        assert!(pcm.iter().any(|s| s.unsigned_abs() > 500));
+        assert_eq!(pcm[pcm.len() - 1], 0);
+        let (short, ended) = render_song_pcm(&song, ChipModel::Mos8580, 2.0);
+        assert!(!ended && short.len() as f64 / SAMPLE_RATE as f64 <= 2.01);
+    }
 
     /// Signal power at `freq` (Goertzel).
     fn power_at(pcm: &[i16], freq: f64) -> f64 {

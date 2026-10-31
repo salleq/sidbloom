@@ -12,6 +12,7 @@ Compose C64 music with a clearer interface and export real, C64-compatible `.sid
 - Export `.sid` (PSID v2, PAL/NTSC, 6581/8580) and a self-starting `.prg` (`LOAD"*",8,1` + `RUN`) with an own 6502 player; verified register-for-register against the engine in a 6502 emulator and played back by the independent `sidplayfp`
 - **MIDI file import** (`.mid`): pick which parts play on the three voices; chords are reduced to the top note
 - MIDI keyboard input: play and record notes from a MIDI keyboard (desktop app via the system MIDI; browsers with Web MIDI)
+- **Export to MP3** (`.mp3`): the song rendered once through with reSID, for sharing as audio
 - Project files (`.sidb`, JSON). Exported `.sid` / `.prg` files carry the project inside (after the music data) and open again for editing
 - **Import of SID-Wizard 1.x modules** (`.swm`, `.prg`, `.p00`): tested against all of SID-Wizard's own demo tunes (50+), which then export and play back identically in the 6502 player. Features this tracker lacks (filter programs, built-in vibrato, absolute-pitch arps, extra subtunes, tempo programs, chord speed) are approximated and listed in an import report
 
