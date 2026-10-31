@@ -156,7 +156,7 @@ try {
   step("copy / paste a whole track");
 
   // playback runs in an AudioWorklet and reports positions; output must be audible
-  await page.getByTestId("play").click();
+  await page.getByTestId("play-from-pattern").click();
   await page.waitForFunction(() => window.__sidbloom.messages > 3, null, { timeout: 15000 });
   const level = await page.evaluate(async () => {
     const a = window.__sidbloom.analyser.current;
@@ -374,7 +374,7 @@ try {
   await page.getByLabel("MIDI input").selectOption("Test Keyboard");
   await page.locator(".trow").nth(2).locator(".f.note").first().click();
   assert.doesNotMatch(await page.locator(".trow").nth(2).innerText(), /A-4/);
-  assert.ok((await page.getByTestId("play").innerText()).includes("Pattern"), "previewing must not look like playing");
+  assert.ok((await page.getByTestId("play").innerText()).includes("Play"), "previewing must not look like playing");
   await page.evaluate(() => window.__fakeMidi.send([0x90, 69, 100])); // A4
   await page.waitForTimeout(200);
   assert.match(await page.locator(".trow").nth(2).innerText(), /A-4/);
@@ -434,12 +434,12 @@ try {
   await page.getByLabel("Octave up").click();
   step("octave changes with buttons, < > and F1 F2");
 
-  // Space loops the current pattern, Shift+Space plays the song, double-click on the song order plays that pattern
+  // Ctrl+Space loops the current pattern, Shift+Space plays the song, double-click on the song order plays that pattern
   await page.getByTestId("tab-song").click();
   await page.getByRole("button", { name: "+ Position" }).click();
   await page.locator(".order-row").nth(0).click();
   await page.locator(".tracker").click({ position: { x: 5, y: 5 } });
-  await page.keyboard.press("Space");
+  await page.keyboard.press("Control+Space");
   await page.waitForSelector(".order-row.playing");
   await page.waitForTimeout(600);
   assert.ok((await page.getByTestId("play").innerText()).includes("Stop"));
@@ -447,7 +447,7 @@ try {
   assert.ok((await page.locator(".order-row").nth(0).getAttribute("class")).includes("playing"), "loops position 0");
   await page.locator(".order-row").nth(1).click();
   await page.waitForFunction(() => document.querySelectorAll(".order-row")[1]?.classList.contains("playing"));
-  step("Space loops the current pattern; selecting another position moves the loop");
+  step("Ctrl+Space loops the current pattern; selecting another position moves the loop");
   await page.keyboard.press("Space");
   await page.waitForFunction(() => !document.querySelector(".order-row.playing"));
   await page.locator(".order-row").nth(0).dblclick();
@@ -461,10 +461,35 @@ try {
   await page.waitForFunction(() => !document.querySelector(".order-row.playing"));
   step("double-click plays a pattern; Shift+Space plays the song");
 
+  // double-click while the whole song plays continues the song from that pattern instead of looping it
+  await page.keyboard.press("Shift+Space");
+  await page.waitForSelector(".order-row.playing");
+  await page.locator(".order-row").nth(1).dblclick();
+  await page.waitForFunction(() => document.querySelectorAll(".order-row")[1]?.classList.contains("playing"));
+  assert.ok((await page.getByTestId("play-from-pattern").innerText()).includes("Pattern"));
+  await page.getByTestId("play").click(); // stop
+  await page.waitForFunction(() => !document.querySelector(".order-row.playing"));
+  step("double-click during song playback plays the song on from that pattern");
+
+  // copy a position to the end; drag a position to be last; Ctrl-drag copies
+  await page.getByTestId("tab-song").click();
+  const nPos = () => page.locator(".order-row").count();
+  const nOrd = await nPos();
+  const first = (await page.locator(".order-row").first().innerText()).replace(/\s+/g, " ");
+  await page.locator(".order-row").first().click();
+  await page.getByTestId("copy-to-end").click();
+  assert.equal(await nPos(), nOrd + 1, "copy to end adds a position");
+  const lastOf = async () => (await page.locator(".order-row").last().innerText()).replace(/\s+/g, " ");
+  assert.notEqual(await lastOf(), first.replace(/^00/, ""), "the copy has its own pattern number");
+  await page.getByTestId("order-row-0").dragTo(page.getByTestId("order-row-" + nOrd));
+  assert.equal(await nPos(), nOrd + 1, "moving keeps the count");
+  assert.equal((await page.locator(".order-row").nth(nOrd).innerText()).replace(/\s+/g, " ").slice(2), first.slice(2), "dragged position is now last");
+  step("copy a position to the end; drag a position to the end");
+
   // the song from the current pattern, not from the start
   await page.getByTestId("tab-song").click();
   await page.locator(".order-row").nth(1).click();
-  await page.getByTestId("play-from-pattern").click();
+  await page.getByTestId("play").click();
   await page.waitForFunction(() => document.querySelectorAll(".order-row")[1]?.classList.contains("playing"));
   assert.equal(await page.locator(".order-row.playing").count(), 1);
   await page.getByTestId("play").click(); // stop

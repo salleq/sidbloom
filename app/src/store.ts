@@ -321,6 +321,24 @@ export const edits = {
   newPage: (pos: number) => (s: Song) => insertPage(s, pos, (p) => emptyPattern(p.rows.length)),
   /** Inserts a new position after `pos` holding copies of that position's patterns. */
   duplicatePage: (pos: number) => (s: Song) => insertPage(s, pos, (p) => structuredClone(p)),
+  /** Moves position `from` so that it ends up at index `to` of the song order. */
+  moveOrder: (from: number, to: number) => (s: Song) => {
+    for (const c of [0, 1, 2]) {
+      const o = s.orders[c];
+      if (from >= o.length) continue;
+      const [x] = o.splice(from, 1);
+      o.splice(Math.min(to, o.length), 0, x);
+    }
+  },
+  /** Inserts a copy of position `from` (with copies of its patterns) so that it ends up at index `to`. */
+  copyOrder: (from: number, to: number) => (s: Song) => {
+    const voices = [0, 1, 2].filter((c) => patternAt(s, c, from));
+    if (!voices.length || s.patterns.length + voices.length > LIMITS.patterns) return;
+    for (const c of voices) {
+      s.patterns.push(structuredClone(patternAt(s, c, from)!));
+      s.orders[c].splice(Math.min(to, s.orders[c].length), 0, s.patterns.length - 1);
+    }
+  },
   /** Empties the patterns at `pos`: all voices when linked, else only voice `ch`. */
   clearPattern: (ch: number, pos: number) => (s: Song) => {
     for (const c of s.linked ? [0, 1, 2] : [ch]) {
