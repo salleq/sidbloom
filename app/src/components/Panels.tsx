@@ -20,14 +20,40 @@ export function OrderPanel({ song, orderPos, ch, dispatch, playOrder, onPlay }: 
     dispatch({ t: "edit", fn });
     dispatch({ t: "orderPos", pos: orderPos + 1 });
   };
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+  // drop on a row: move there (hold Ctrl / Alt to copy instead); `to` may be n, the spot after the last position
+  const drop = (to: number, copy: boolean) => {
+    if (dragFrom === null) return;
+    if (copy) {
+      if (!room) return;
+      dispatch({ t: "edit", fn: edits.copyOrder(dragFrom, to) });
+      dispatch({ t: "orderPos", pos: to });
+    } else {
+      const dest = Math.min(to, n - 1); // the dragged position takes the place of the one it is dropped on
+      dispatch({ t: "edit", fn: edits.moveOrder(dragFrom, dest) });
+      dispatch({ t: "orderPos", pos: dest });
+    }
+    setDragFrom(null); setDragOver(null);
+  };
+  const over = (to: number) => (e: React.DragEvent) => {
+    if (dragFrom === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = e.ctrlKey || e.altKey ? "copy" : "move";
+    setDragOver(to);
+  };
   return (
     <section className="panel">
       <h2>Song order</h2>
       <div className="order-list" role="listbox" aria-label="Order list">
         {Array.from({ length: n }, (_, p) => (
           <button key={p} role="option" aria-selected={p === orderPos}
-            className={`order-row${p === orderPos ? " sel" : ""}${p === playOrder ? " playing" : ""}`}
-            title="Click to select, double-click to play this pattern"
+            className={`order-row${p === orderPos ? " sel" : ""}${p === playOrder ? " playing" : ""}${dragOver === p ? " over" : ""}`}
+            title="Click to select, double-click to play, drag to move (Ctrl / Alt + drag copies)"
+            draggable data-testid={`order-row-${p}`}
+            onDragStart={(e) => { setDragFrom(p); e.dataTransfer.effectAllowed = "copyMove"; e.dataTransfer.setData("text/plain", String(p)); }}
+            onDragEnd={() => { setDragFrom(null); setDragOver(null); }}
+            onDragOver={over(p)} onDrop={(e) => { e.preventDefault(); drop(p, e.ctrlKey || e.altKey); }}
             onClick={() => dispatch({ t: "orderPos", pos: p })} onDoubleClick={() => onPlay(p)}>
             <b>{hex(p)}</b>
             {song.linked
@@ -35,6 +61,15 @@ export function OrderPanel({ song, orderPos, ch, dispatch, playOrder, onPlay }: 
               : [0, 1, 2].map((c) => <span key={c}>{song.orders[c][p] === undefined ? "--" : hex(song.orders[c][p])}</span>)}
           </button>
         ))}
+        {dragFrom !== null && (
+          <div className={`order-end${dragOver === n ? " over" : ""}`} data-testid="order-end" onDragOver={over(n)} onDrop={(e) => { e.preventDefault(); drop(n, e.ctrlKey || e.altKey); }}>
+            drop here to put last
+          </div>
+        )}
+      </div>
+      <div className="btn-row">
+        <button onClick={() => { dispatch({ t: "edit", fn: edits.copyOrder(orderPos, n) }); dispatch({ t: "orderPos", pos: n }); }} disabled={!room} data-testid="copy-to-end"
+          title="Add a copy of this position (with copies of its patterns) at the end of the song">Copy to end</button>
       </div>
       <div className="btn-row">
         <button onClick={() => dispatch({ t: "edit", fn: edits.insertOrder(orderPos) })} title="Insert a position after this one">+ Position</button>
@@ -248,8 +283,8 @@ export function HelpPanel() {
         <dt>Del / Backspace</dt><dd>Clear cell · Ins inserts a row</dd>
         <dt>&lt; &gt; · F1 F2 · [ ]</dt><dd>Octave down / up</dd>
         <dt>− = · F3 F4</dt><dd>Previous / next instrument</dd>
-        <dt>Space</dt><dd>Loop the current pattern · Shift+Space plays the whole song</dd>
-        <dt>Enter · Shift+Enter</dt><dd>Play the song from the cursor · from the start of the current pattern</dd>
+        <dt>Space</dt><dd>Play the song from the current pattern · Shift+Space from the top · Ctrl+Space loops the current pattern</dd>
+        <dt>Enter · Shift+Enter</dt><dd>Play the song from the cursor · from the start of the current pattern (same as Space)</dd>
         <dt>Ctrl+A · Ctrl+[ ]</dt><dd>Select the whole pattern · transpose selection ±1 (Shift: ±12)</dd>
         <dt>Copy / Paste in a voice header</dt><dd>Copy or replace a whole track of the pattern, no selecting needed</dd>
         <dt>Drag, Shift+arrows</dt><dd>Select cells · Ctrl+C / X / V copy, cut, paste</dd>

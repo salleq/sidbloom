@@ -8,7 +8,7 @@ and export real `.sid` files that play on a C64 or in any SID player.
 2. Click **New** for an empty song.
 3. Click a cell in **Voice 1**. Press **Z S X D C V G B H N J M** (a piano on the bottom keyboard row; **Q W E R T Y U**
    continue one octave higher). Each key writes a note and moves down one row; you hear it as you type.
-4. Press **Space** to loop the current pattern, **Shift+Space** to play the whole song from the top, **Enter** to play the song from the cursor.
+4. Press **Space** to play the song from the current pattern, **Ctrl+Space** to loop the current pattern, **Shift+Space** to play the whole song from the top, **Enter** to play the song from the cursor.
 5. **Export .sid** writes the file. That's it.
 
 ## 2. The screen
@@ -58,8 +58,12 @@ copy of the current pattern, and move onto it. **Clear** empties the current pat
 no position refers to (they pile up when you pick other patterns with ◀ ▶). Playback loops when every voice reaches the end of
 its list.
 
-**▶ Pattern** (Space) loops the current pattern, **▶ Song** plays the song from the start, **▶ From pattern**
-(Shift+Enter) plays the song starting at the current pattern, and **▶ From cursor** (Enter) starts at the cursor row.
+**▶ Play** (Space) plays the song starting at the current pattern, **↻ Pattern** (Ctrl+Space) loops the current pattern,
+**▶ Song** (Shift+Space) plays the song from the start, and **▶ From cursor** (Enter) starts at the cursor row.
+
+In the song order you can **drag** a position onto another to move it there (or into the "drop here to put last" area); hold
+**Ctrl / Alt** while dropping to copy it. **Copy to end** adds a copy of the current position at the end. Double-clicking a position
+plays that pattern in a loop, or, while the whole song is playing, continues the song from it.
 
 **Linked patterns** (the checkbox in the order panel; on for new songs) work like a `.mod` tracker: one pattern number
 covers all three voices, so **New**, **Duplicate**, ◀ ▶ and **Rows** act on every voice at once. Together with

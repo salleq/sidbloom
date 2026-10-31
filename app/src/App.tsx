@@ -314,6 +314,7 @@ export function App({ initial }: { initial: Song }) {
       const lower = key.toLowerCase();
       const act = (a: Parameters<typeof dispatch>[0]) => { e.preventDefault(); dispatch(a); };
       if (mod) {
+        if (key === " ") { e.preventDefault(); return void (playing ? stop() : play("pattern")); }
         if (lower === "z") return act({ t: e.shiftKey ? "redo" : "undo" });
         if (lower === "y") return act({ t: "redo" });
         if (lower === "s") { e.preventDefault(); void save(e.shiftKey); return; }
@@ -328,7 +329,7 @@ export function App({ initial }: { initial: Song }) {
       }
       if (e.altKey) return;
       switch (key) {
-        case " ": e.preventDefault(); return void (playing ? stop() : play(e.shiftKey ? "song" : "pattern"));
+        case " ": e.preventDefault(); return void (playing ? stop() : play(mod ? "pattern" : e.shiftKey ? "song" : "here"));
         case "Enter": e.preventDefault(); return void play(e.shiftKey ? "here" : "cursor");
         case "Escape": dispatch({ t: "deselect" }); return stop();
         case "ArrowUp": return act({ t: "move", drow: -1, extend: e.shiftKey });
@@ -393,11 +394,11 @@ export function App({ initial }: { initial: Song }) {
           <button onClick={() => dispatch({ t: "redo" })} disabled={!st.future.length} title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
         </div>
         <div className="group transport">
-          <button className="primary" onClick={() => (playing ? stop() : void play("pattern"))} data-testid="play" aria-label={playing ? "Stop" : "Play"} title="Loop the current pattern / stop (Space)">
-            {playing ? "■ Stop" : "▶ Pattern"}
+          <button className="primary" onClick={() => (playing ? stop() : void play("here"))} data-testid="play" aria-label={playing ? "Stop" : "Play"} title="Play the song from the current pattern / stop (Space)">
+            {playing ? "■ Stop" : "▶ Play"}
           </button>
           <button onClick={() => void play("song")} title="Play the whole song from the start (Shift+Space)" data-testid="play-song">▶ Song</button>
-          <button onClick={() => void play("here")} title="Play the song from the start of the current pattern (Shift+Enter)" data-testid="play-from-pattern">▶ From pattern</button>
+          <button onClick={() => void play("pattern")} title="Loop the current pattern (Ctrl+Space)" data-testid="play-from-pattern">↻ Pattern</button>
           <button onClick={() => void play("cursor")} title="Play the song from the cursor (Enter)">▶ From cursor</button>
         </div>
         <div className="group">
@@ -478,7 +479,7 @@ export function App({ initial }: { initial: Song }) {
             ))}
           </nav>
           <div className="tab-body">
-            {tab === "song" && <OrderPanel song={song} orderPos={st.orderPos} ch={st.cursor.ch} dispatch={dispatch} playOrder={playPos ? playPos[0][0] : null} onPlay={(p) => { dispatch({ t: "orderPos", pos: p }); void play("pattern", p); }} />}
+            {tab === "song" && <OrderPanel song={song} orderPos={st.orderPos} ch={st.cursor.ch} dispatch={dispatch} playOrder={playPos ? playPos[0][0] : null} onPlay={(p) => { dispatch({ t: "orderPos", pos: p }); void play(playing && modeRef.current !== "pattern" ? "here" : "pattern", p); }} />}
             {tab === "inst" && <InstrumentPanel song={song} inst={st.curInst} clip={st.instClip} dispatch={dispatch} onPreview={(note) => hearNote(note ?? 58)} />}
             {tab === "chords" && <ChordPanel song={song} dispatch={dispatch} />}
             {tab === "filter" && <FilterPanel song={song} dispatch={dispatch} />}
