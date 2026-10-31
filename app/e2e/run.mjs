@@ -233,6 +233,14 @@ try {
   assert.match(dialogText, /no SIDbloom project/);
   step("foreign .sid is rejected with an explanation");
 
+  // export to MP3: a real MP3 stream (frame sync, ~128 kbit/s) of the whole song
+  const [mp] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-mp3").click()]);
+  const mpb = readFileSync(await mp.path());
+  assert.ok(mp.suggestedFilename().endsWith(".mp3"), mp.suggestedFilename());
+  assert.ok(mpb.length > 20000, `mp3 too small: ${mpb.length}`);
+  assert.ok(mpb[0] === 0xff && (mpb[1] & 0xe0) === 0xe0, "no MP3 frame sync at the start");
+  step("song exported as MP3");
+
   // export for SID-Wizard: a C64 PRG (load address $3333) holding an SWM1 module, which the importer reads back
   const [sw] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-swm").click()]);
   const swb = readFileSync(await sw.path());

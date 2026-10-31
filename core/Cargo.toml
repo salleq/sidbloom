@@ -1,6 +1,6 @@
 [package]
 name = "sidcore"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "Core of a modern 3-channel SID tracker: model, engine, export"

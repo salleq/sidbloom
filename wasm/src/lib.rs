@@ -52,6 +52,13 @@ pub fn swm_export_notes(song_json: &str) -> Result<String, JsError> {
     serde_json::to_string(&x.warnings).map_err(|e| JsError::new(&e.to_string()))
 }
 
+/// The song played once through (to where it would loop), as mono 16-bit samples at 44.1 kHz, for audio export.
+/// Stops at `max_seconds` (output of exactly that length means the song was cut off).
+#[wasm_bindgen]
+pub fn render_song(song_json: &str, is_8580: bool, max_seconds: f64) -> Result<Vec<i16>, JsError> {
+    Ok(sidcore::audio::render_song_pcm(&parse(song_json)?, model(is_8580), max_seconds).0)
+}
+
 /// Realtime player driven from an AudioWorklet.
 #[wasm_bindgen]
 pub struct Player {

@@ -133,6 +133,8 @@ The SID has one filter shared by all voices. Choose which voices go through it, 
   for each of the three voices; the busiest three are preselected. A SID voice plays one note at a time, so chords are reduced
   to their highest note, the drum channel becomes a noise instrument, and timing is rounded to four rows per beat. Only the first
   tempo is used. What was changed is listed in the report above the editor.
+- **.mp3:** renders the song once through (until it would start over, plus a half-second fade) with the chosen SID chip to a mono
+  128 kbit/s MP3 file, for sharing or listening anywhere. Longer than 10 minutes is cut off. Mute / Solo does not change it.
 - **SW .swm:** exports a SID-Wizard 1.x module, saved as a C64 PRG (`name.swm.prg`, load address `$3333`) like SID-Wizard
   itself saves them (the file name is cut to 12 characters, because SID-Wizard shows short names only), so you can carry on with the tune in SID-Wizard. Notes, instruments (waveform table, pulse sweep,
   envelope, chord), chords, the three orderlists, slide, vibrato, chord, filter cutoff / resonance / mode and speed effects
