@@ -6,7 +6,7 @@ All notable changes to SIDbloom are listed here. The format follows
 
 ## [Unreleased]
 
-## [0.5.0] — 2026-10-31
+## [0.5.1] — 2026-10-31
 
 ### Changed
 - **Space** now plays the whole song from the current pattern; **Ctrl+Space** loops the current pattern (the old Space behaviour). The transport buttons are now **▶ Play**, **↻ Pattern** and **▶ Song**.
@@ -14,6 +14,10 @@ All notable changes to SIDbloom are listed here. The format follows
 ### Added
 - **Song order: drag and drop.** Drag a position onto another to move it there (a "drop here to put last" area appears while dragging); hold Ctrl / Alt while dropping to copy it instead. The **Copy to end** button adds a copy of the current position (with copies of its patterns) at the end of the song.
 - **Double-click in the song order** while the whole song is playing continues the song from that pattern instead of looping it.
+
+## [0.5.0] — 2026-10-31
+
+### Added
 - **Export to MP3** (`.mp3` button): the song is rendered once through (to the point where it would loop, with a short fade-out) using the chosen SID chip, and saved as a mono 128 kbit/s MP3. Uses the LGPL-licensed lamejs encoder.
 
 ## [0.4.1] — 2026-10-30
